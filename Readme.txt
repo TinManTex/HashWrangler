@@ -6,7 +6,15 @@ HashWrangler <hashes file path> <strings file path> -HashFunction <hash function
 
 Options:
 -HashFunction <hash function type>
-Function types StrCode32, PathFileNameCode64, PathFileNameCode32, defaults to StrCode32 
+or
+-h <hash function type>
+Function types - defaults to StrCode32
+StrCode32 or str32
+PathFileNameCode64
+PathFileNameCode32
+PathCode64
+PathCode64Gz
+Options are case insensitive
 
 Output:
 <hashes>_matchedHashes.txt - hashes that matched a string
@@ -21,4 +29,6 @@ _matchedHashes and _matchedStrings are output in paired order, so for a given li
 
 <strings>_HashStringsCollisions.txt - hash strings pairs, input strings that resolved to the same input hash.
 
-See Wrangling Hashes.txt in https://github.com/TinManTex/mgsv-lookup-strings for more info.
+Files with output suffixes in their names will not be read as input.
+
+See Wrangling Hashes.txt in https://github.com/TinManTex/mgsv-lookup-strings or http://metalgearmodding.wikia.com/wiki/Hash_Wrangling for more info.

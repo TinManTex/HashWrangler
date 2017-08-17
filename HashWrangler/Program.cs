@@ -11,6 +11,16 @@ namespace HashWrangler {
     class Program {
         delegate string HashFunction(string str);
 
+        //SYNC with whatever you output
+        static string[] outputSuffixes = {
+            "_HashStringsCollisions",
+            "_HashStringMatches",
+            "_unmatchedHashes", 
+            "_matchedHashes",
+            "_unmatchedStrings",
+            "_matchedStrings"
+        };
+
         static void Main(string[] args) {
             if (args.Length < 2) {
                 ShowUsageInfo();
@@ -23,7 +33,7 @@ namespace HashWrangler {
             string funcType = "StrCode32";
 
             if (args.Count() > 3) {
-                if (args[2].ToLower() == "-hashfunction") {
+                if (args[2].ToLower() == "-hashfunction" || args[2].ToLower() == "-h") {
                     funcType = args[3];
                 }
             }
@@ -38,14 +48,23 @@ namespace HashWrangler {
                 return;
             }
 
+            if (!Path.IsPathRooted(inputHashesPath)) {
+                inputHashesPath = Path.GetFullPath(inputHashesPath);
+            }
+            if (!Path.IsPathRooted(inputStringsPath)) {
+                inputStringsPath = Path.GetFullPath(inputStringsPath);
+            }
+
             Dictionary<string, HashFunction> hashFuncs = new Dictionary<string, HashFunction>();
-            hashFuncs["StrCode32"] = StrCode32Str;
-            hashFuncs["PathFileNameCode32"] = PathFileNameCode32Str;
-            hashFuncs["PathFileNameCode64"] = PathFileNameCode64Str;//tex for want of a better name
+            hashFuncs["strcode32"] = StrCode32Str;
+            hashFuncs["pathfilenamecode32"] = PathFileNameCode32Str;
+            hashFuncs["pathfilenamecode64"] = PathFileNameCode64Str;//tex for want of a better name
+            hashFuncs["pathcode64"] = PathCode64Str;
+            hashFuncs["pathcode64gz"] = PathCode64GzStr;
 
             HashFunction HashFunc;
             try {
-                HashFunc = hashFuncs[funcType];
+                HashFunc = hashFuncs[funcType.ToLower()];
             } catch (KeyNotFoundException) {
                 HashFunc = StrCode32Str;
                 Console.WriteLine("ERROR: Could not find hash function " + funcType);
@@ -65,7 +84,6 @@ namespace HashWrangler {
             if (inputHashes == null) {
                 return;
             }
-
 
             if (dictionary==null || inputHashes==null) {
                 return;
@@ -127,11 +145,32 @@ namespace HashWrangler {
             int numHashPlaces = numInputHashes.ToString().Length;
             int numStringPlaces = numInputHashes.ToString().Length;
 
-            Console.WriteLine("unmatchedHashes    [" + unmatchedHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "]");
-            Console.WriteLine("matchedHashes      [" + matchedHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "]");
-            Console.WriteLine("collsionHashes     [" + collisionHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "]");
-            Console.WriteLine("unmatchedStrings   [" + unmatchedStrings.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "]");
-            Console.WriteLine("matchedStrings     [" + matchedStrings.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "]");
+            float hashPerMult = numInputHashes;
+            float stringPerMult = 0;
+
+            float unmatchedHashesPercent = 0;
+            float matchedHashesPercent = 0;
+            float collisionHashesPercent = 0;
+            float unmatchedStringsPercent = 0;
+            float matchedStringsPercent = 0;
+
+            if (numInputHashes > 0) {
+                hashPerMult = 100.0f / (float)numInputHashes;
+                unmatchedHashesPercent = unmatchedHashes.Count * hashPerMult;
+                matchedHashesPercent = matchedHashes.Count * hashPerMult;
+                collisionHashesPercent = collisionHashes.Count * hashPerMult;
+            }
+            if (numInputStrings > 0) {
+                stringPerMult = 100.0f / (float)numInputStrings;
+                unmatchedStringsPercent = unmatchedStrings.Count * stringPerMult;
+                matchedStringsPercent = matchedStrings.Count * stringPerMult;
+            }
+
+            Console.WriteLine("unmatchedHashes    [" + unmatchedHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + unmatchedHashesPercent + "%");
+            Console.WriteLine("matchedHashes      [" + matchedHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + matchedHashesPercent + "%");
+            Console.WriteLine("collsionHashes     [" + collisionHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + collisionHashesPercent + "%");
+            Console.WriteLine("unmatchedStrings   [" + unmatchedStrings.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + unmatchedStringsPercent + "%");
+            Console.WriteLine("matchedStrings     [" + matchedStrings.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + unmatchedStringsPercent + "%");
 
             Console.WriteLine("Writing out files");
 
@@ -190,8 +229,7 @@ namespace HashWrangler {
             File.WriteAllLines(stringsPath + "_matchedStrings.txt", matchedStringsList.ToArray());
 
 
-            Console.WriteLine("All done");//DEBUGNOW
-            //Console.ReadKey();//DEBUGNOW
+            Console.WriteLine("All done");
         }
 
         static void ShowUsageInfo() {
@@ -199,20 +237,26 @@ namespace HashWrangler {
                               "  For comparing lists of hashes against lists of strings and outputting found and unfound lists.\n" +
                               "Usage:\n" +
                               "  HashWrangler <hashes file path> <strings file path> [-HashFunction <hash function name>]\n" +
-                              "  HashFunction defaults to StrCode32, others are PathFileCode32, PathFileNameCode64 - path file name no extension hash seen in GzsTool dictionary\n"
-                              );//DEBUGNOW
+                              "  HashFunction defaults to StrCode32, others are PathCode64, PathCode64Gz, PathFileNameCode43, PathFileNameCode32.\n" +
+                              "  Options are case insensitive\n"
+                              );
         }
 
         private static Dictionary<string, HashSet<string>> BuildDictionary(string path, HashFunction HashFunc) {
             var dictionary = new Dictionary<string, HashSet<string>>();
 
+            string[] files = null;
+            if (File.Exists(path)) {
+                files = new string[] { path };
+            }
             if (Directory.Exists(path)) {
-                string[] files = Directory.GetFiles(path,"*.txt");
+                files = Directory.GetFiles(path, "*.txt");
+            }
+
+            if (files!=null) {
                 foreach (string filePath in files) {
                     ReadDictionary(filePath, HashFunc, ref dictionary);
                 }
-            } else {
-                ReadDictionary(path, HashFunc, ref dictionary);
             }
 
             return dictionary;
@@ -220,6 +264,13 @@ namespace HashWrangler {
 
         private static void ReadDictionary(string path, HashFunction HashFunc, ref Dictionary<string, HashSet<string>> dictionary) {
             Console.WriteLine("ReadDictionary " + path);
+            if (!File.Exists(path)) {
+                Console.WriteLine("Could not find " + path);
+                return;
+            }
+
+            int dups = 0;
+
             string[] lines;
             try {
                 lines = File.ReadAllLines(path);
@@ -235,10 +286,11 @@ namespace HashWrangler {
                 if (dictionary.TryGetValue(hash, out stringsForHash)) {
                     bool isNew = stringsForHash.Add(line);
                     if (!isNew) {
-                        Console.WriteLine("string " + line + " already exists for hash " + hash);//DEBUGNOW
+                        //Console.WriteLine("string " + line + " already exists for hash " + hash);//DEBUGNOW
+                        dups++;
                     } else {
                         string strings = String.Join(" | ", stringsForHash.ToArray());
-                        Console.WriteLine("hash collision for " + hash + ": " + strings);//DEBUGNOW
+                        //Console.WriteLine("hash collision for " + hash + ": " + strings);//DEBUGNOW
                     }
                 } else {
                     stringsForHash = new HashSet<string>();
@@ -246,23 +298,38 @@ namespace HashWrangler {
                     dictionary.Add(hash, stringsForHash);
                 }
             }
+            if (dups > 0) {
+                Console.WriteLine(dups + " strings from " + Path.GetFileName(path) + " were already in dictionary");//DEBUGNOW
+            }
         }
 
         private static List<string> GetInputHashes(string path) {
             var inputHashes = new HashSet<string>();
+
+            string[] files = null;
+            if (File.Exists(path)) {
+                files = new string[] { path };
+            }
             if (Directory.Exists(path)) {
-                string[] files = Directory.GetFiles(path, "*.txt");
+                files = Directory.GetFiles(path, "*.txt");
+            }
+
+            if (files != null) {
                 foreach (string filePath in files) {
                     ReadInputHashes(filePath, ref inputHashes);
                 }
-            } else {
-                ReadInputHashes(path, ref inputHashes);
             }
+
             return inputHashes.ToList();
         }
 
         private static void ReadInputHashes(string path, ref HashSet<string> inputHashes) {
             Console.WriteLine("ReadInputHashes " + path);
+            if (!File.Exists(path)) {
+                Console.WriteLine("Could not find " + path);
+                return;
+            }
+
             int duplicates = 0;
 
             string[] lines;
@@ -295,9 +362,18 @@ namespace HashWrangler {
             var hash = (uint)Hashing.HashFileNameWithExtension(text);
             return hash.ToString();
         }
-        //tex DEBUGNOW TODO name, this is more specific to gzstool dictionary implementation than a general Fox implementation?
         public static string PathFileNameCode64Str(string text) {
+            ulong hash = Hashing.HashFileNameWithExtension(text);
+            return hash.ToString();
+        }
+        //tex DEBUGNOW TODO name, this is more specific to gzstool dictionary implementation than a general Fox implementation?
+        public static string PathCode64Str(string text) {
             ulong hash = Hashing.HashFileName(text) & 0x3FFFFFFFFFFFF;
+            return hash.ToString("x");
+        }
+
+        public static string PathCode64GzStr(string text) {
+            ulong hash = Hashing.HashFileNameLegacy(text);
             return hash.ToString("x");
         }
     }
