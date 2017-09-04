@@ -9,7 +9,8 @@ Options:
 or
 -h <hash function type>
 Function types - defaults to StrCode32
-StrCode32 or str32
+StrCode32
+StrCode64
 PathFileNameCode64
 PathFileNameCode32
 PathCode64

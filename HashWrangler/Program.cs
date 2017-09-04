@@ -22,7 +22,7 @@ namespace HashWrangler {
         };
 
         static void Main(string[] args) {
-            if (args.Length < 2) {
+            if (args.Length == 0 || args.Length < 2) {
                 ShowUsageInfo();
                 return;
             }
@@ -57,6 +57,7 @@ namespace HashWrangler {
 
             Dictionary<string, HashFunction> hashFuncs = new Dictionary<string, HashFunction>();
             hashFuncs["strcode32"] = StrCode32Str;
+            hashFuncs["strcode64"] = StrCode64Str;
             hashFuncs["pathfilenamecode32"] = PathFileNameCode32Str;
             hashFuncs["pathfilenamecode64"] = PathFileNameCode64Str;//tex for want of a better name
             hashFuncs["pathcode64"] = PathCode64Str;
@@ -79,7 +80,7 @@ namespace HashWrangler {
                 return;
             }
 
-            List<string> inputStrings = dictionary.SelectMany(d => d.Value).ToList(); //tex could save off initial file RealAllLines in BuildDictionary but would still have to uniquify it.
+            List<string> inputStrings = dictionary.SelectMany(d => d.Value).ToList(); //tex could save off initial file ReadAllLines in BuildDictionary but would still have to uniquify it.
             List<string> inputHashes = GetInputHashes(inputHashesPath);
             if (inputHashes == null) {
                 return;
@@ -119,7 +120,7 @@ namespace HashWrangler {
                     } else {
                         bool isNew = matchedHashes.Add(hash);
                         if (!isNew) {
-                            Console.WriteLine("Hash " + hash + " was already in matchedHashes");//DEBUGNOW
+                            //Console.WriteLine("Hash " + hash + " was already in matchedHashes");
                         }
                         foreach (string str in stringsForHash) {
                             matchedStrings.Add(str);
@@ -129,7 +130,7 @@ namespace HashWrangler {
                     //Console.WriteLine("No string found for hash " + hash);//DEBUG
                     bool isNew = unmatchedHashes.Add(hash);
                     if (!isNew) {
-                        Console.WriteLine("Hash " + hash + " was already in unmatchedHashes");//DEBUGNOW
+                        //Console.WriteLine("Hash " + hash + " was already in unmatchedHashes");//DEBUGNOW
                     }
                 }
             }
@@ -170,19 +171,14 @@ namespace HashWrangler {
             Console.WriteLine("matchedHashes      [" + matchedHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + matchedHashesPercent + "%");
             Console.WriteLine("collsionHashes     [" + collisionHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + collisionHashesPercent + "%");
             Console.WriteLine("unmatchedStrings   [" + unmatchedStrings.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + unmatchedStringsPercent + "%");
-            Console.WriteLine("matchedStrings     [" + matchedStrings.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + unmatchedStringsPercent + "%");
+            Console.WriteLine("matchedStrings     [" + matchedStrings.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + matchedStringsPercent + "%");
 
             Console.WriteLine("Writing out files");
 
-            var unmatchedHashesList = unmatchedHashes.ToList<string>();
-            unmatchedHashesList.Sort();
-            var unmatchedStringsList = unmatchedStrings.ToList<string>();
-            unmatchedStringsList.Sort();
-
-            var matchedHashesList = matchedHashes.ToList<string>();
-            matchedHashesList.Sort();
-            var matchedStringsList = matchedStrings.ToList<string>();
-            matchedStringsList.Sort();
+            var unmatchedHashesList = unmatchedHashes.OrderBy(s => s, StringComparer.InvariantCultureIgnoreCase).ToArray<string>();
+            var unmatchedStringsList = unmatchedStrings.OrderBy(s => s, StringComparer.InvariantCultureIgnoreCase).ToArray<string>();
+            var matchedHashesList = matchedHashes.OrderBy(s => s, StringComparer.InvariantCultureIgnoreCase).ToArray<string>();
+            var matchedStringsList = matchedStrings.OrderBy(s => s, StringComparer.InvariantCultureIgnoreCase).ToArray<string>();
 
             var hashStringsCollisions = new List<string>();
             foreach (var item in collisionHashes) {
@@ -218,15 +214,20 @@ namespace HashWrangler {
                 stringsPath = Path.Combine(inputStringsPath, "..") + "\\" + new DirectoryInfo(inputStringsPath).Name + "Strings";
             }
 
-            //tex TODO: what's the best name
-            File.WriteAllLines(stringsPath + "_HashStringsCollisions.txt", hashStringsCollisions.ToArray());
+            //tex delete since we might not be overwriting and old one could cause confusion
+            if (File.Exists(stringsPath + "_HashStringsCollisions.txt")) {
+                File.Delete(stringsPath + "_HashStringsCollisions.txt");
+            }
+            if (hashStringsCollisions.Count > 0) {
+                File.WriteAllLines(stringsPath + "_HashStringsCollisions.txt", hashStringsCollisions.ToArray());
+            }
             File.WriteAllLines(stringsPath + "_HashStringMatches.txt", hashStringMatches.ToArray());
 
-            File.WriteAllLines(hashesPath + "_unmatchedHashes.txt", unmatchedHashesList.ToArray());
-            File.WriteAllLines(hashesPath + "_matchedHashes.txt", matchedHashesList.ToArray());
+            File.WriteAllLines(hashesPath + "_unmatchedHashes.txt", unmatchedHashesList);
+            File.WriteAllLines(hashesPath + "_matchedHashes.txt", matchedHashesList);
 
-            File.WriteAllLines(stringsPath + "_unmatchedStrings.txt", unmatchedStringsList.ToArray());
-            File.WriteAllLines(stringsPath + "_matchedStrings.txt", matchedStringsList.ToArray());
+            File.WriteAllLines(stringsPath + "_unmatchedStrings.txt", unmatchedStringsList);
+            File.WriteAllLines(stringsPath + "_matchedStrings.txt", matchedStringsList);
 
 
             Console.WriteLine("All done");
@@ -237,7 +238,7 @@ namespace HashWrangler {
                               "  For comparing lists of hashes against lists of strings and outputting found and unfound lists.\n" +
                               "Usage:\n" +
                               "  HashWrangler <hashes file path> <strings file path> [-HashFunction <hash function name>]\n" +
-                              "  HashFunction defaults to StrCode32, others are PathCode64, PathCode64Gz, PathFileNameCode43, PathFileNameCode32.\n" +
+                              "  HashFunction defaults to StrCode32, others are StrCode64, PathCode64, PathCode64Gz, PathFileNameCode64, PathFileNameCode32.\n" +
                               "  Options are case insensitive\n"
                               );
         }
@@ -349,12 +350,16 @@ namespace HashWrangler {
             }
 
             if (duplicates > 0) {
-                Console.WriteLine("There is " + duplicates + " duplicates in " + path);//DEBUGNOW
+                Console.WriteLine("There is " + duplicates + " duplicates in " + path);
             }
         }
 
         public static string StrCode32Str(string text) {
             var hash = (uint)Hashing.HashFileNameLegacy(text);
+            return hash.ToString();
+        }
+        public static string StrCode64Str(string text) {
+            var hash = Hashing.HashFileNameLegacy(text);
             return hash.ToString();
         }
         //TODO: verify output matches lua PathFileNameCode32
