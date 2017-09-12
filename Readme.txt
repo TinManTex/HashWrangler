@@ -33,3 +33,8 @@ _matchedHashes and _matchedStrings are output in paired order, so for a given li
 Files with output suffixes in their names will not be read as input.
 
 See Wrangling Hashes.txt in https://github.com/TinManTex/mgsv-lookup-strings or http://metalgearmodding.wikia.com/wiki/Hash_Wrangling for more info.
+
+Alternate usage:
+HashWrangler <dictionary file path>
+
+outputs <dictionary>_<hash func name>HashMatches.txt for each hash function on the input dictionary.

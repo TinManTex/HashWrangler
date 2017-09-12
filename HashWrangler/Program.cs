@@ -22,13 +22,25 @@ namespace HashWrangler {
         };
 
         static void Main(string[] args) {
-            if (args.Length == 0 || args.Length < 2) {
+            if (args.Length == 0) {
                 ShowUsageInfo();
                 return;
             }
 
             string inputHashesPath = args[0];
-            string inputStringsPath = args[1];
+            string inputStringsPath = null;
+            if (args.Count() > 1)
+            {
+                inputStringsPath = args[1];
+            }
+
+            //tex hashwrangler <strings path>
+            bool buildHashesForDict = false;
+            if (inputStringsPath==null)
+            {
+                buildHashesForDict = true;
+                inputStringsPath = inputHashesPath;
+            }
 
             string funcType = "StrCode32";
 
@@ -81,6 +93,35 @@ namespace HashWrangler {
             }
 
             List<string> inputStrings = dictionary.SelectMany(d => d.Value).ToList(); //tex could save off initial file ReadAllLines in BuildDictionary but would still have to uniquify it.
+            inputStrings.Sort();
+            //
+            if (buildHashesForDict)
+            {
+                Console.WriteLine("buildHashesForDict");
+                foreach (string funcName in hashFuncs.Keys)
+                {
+                    HashFunc = hashFuncs[funcName];
+                    var hashesForInputStrings = new List<string>();
+                    foreach (string str in inputStrings)
+                    {
+                        var hash = HashFunc(str).ToString();
+                        hashesForInputStrings.Add(str + " " + hash);
+                    }
+                    string hashesForInputStringsPath = "";
+                    if (File.Exists(inputStringsPath))
+                    {
+                        hashesForInputStringsPath = Path.GetDirectoryName(inputStringsPath) + "\\" + Path.GetFileNameWithoutExtension(inputStringsPath);
+                    } else
+                    {
+                        hashesForInputStringsPath = Path.Combine(inputStringsPath, "..") + "\\" + new DirectoryInfo(inputStringsPath).Name + "Strings";
+                    }
+
+                    File.WriteAllLines(hashesForInputStringsPath + "_" + funcName + "HashStringMatches.txt", hashesForInputStrings.ToArray());
+                }
+                return;
+            }
+
+
             List<string> inputHashes = GetInputHashes(inputHashesPath);
             if (inputHashes == null) {
                 return;
@@ -239,7 +280,10 @@ namespace HashWrangler {
                               "Usage:\n" +
                               "  HashWrangler <hashes file path> <strings file path> [-HashFunction <hash function name>]\n" +
                               "  HashFunction defaults to StrCode32, others are StrCode64, PathCode64, PathCode64Gz, PathFileNameCode64, PathFileNameCode32.\n" +
-                              "  Options are case insensitive\n"
+                              "  Options are case insensitive\n" +
+                              "  or\n" +
+                              " HashWrangler <dictionary file path>\n" +
+                              "   outputs <dictionary>_<hash func name>HashMatches.txt for each hash function on the input dictionary."
                               );
         }
 
@@ -362,7 +406,7 @@ namespace HashWrangler {
             var hash = Hashing.HashFileNameLegacy(text);
             return hash.ToString();
         }
-        //TODO: verify output matches lua PathFileNameCode32
+        //TODO: verify output matches lua PathFileNameCode32 (it was missing in some cases? see mockfox pathfilename note?)
         public static string PathFileNameCode32Str(string text) {
             var hash = (uint)Hashing.HashFileNameWithExtension(text);
             return hash.ToString();
