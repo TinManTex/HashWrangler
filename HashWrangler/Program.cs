@@ -8,22 +8,26 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace HashWrangler {
-    class Program {
+namespace HashWrangler
+{
+    class Program
+    {
         delegate string HashFunction(string str);
 
         //SYNC with whatever you output
         static string[] outputSuffixes = {
             "_HashStringsCollisions",
             "_HashStringMatches",
-            "_unmatchedHashes", 
+            "_unmatchedHashes",
             "_matchedHashes",
             "_unmatchedStrings",
             "_matchedStrings"
         };
 
-        static void Main(string[] args) {
-            if (args.Length == 0) {
+        static void Main(string[] args)
+        {
+            if (args.Length == 0)
+            {
                 ShowUsageInfo();
                 return;
             }
@@ -37,7 +41,7 @@ namespace HashWrangler {
 
             //tex hashwrangler <strings path>
             bool buildHashesForDict = false;
-            if (inputStringsPath==null)
+            if (inputStringsPath == null)
             {
                 buildHashesForDict = true;
                 inputStringsPath = inputHashesPath;
@@ -45,26 +49,32 @@ namespace HashWrangler {
 
             string funcType = "StrCode32";
 
-            if (args.Count() > 3) {
-                if (args[2].ToLower() == "-hashfunction" || args[2].ToLower() == "-h") {
+            if (args.Count() > 3)
+            {
+                if (args[2].ToLower() == "-hashfunction" || args[2].ToLower() == "-h")
+                {
                     funcType = args[3];
                 }
             }
 
-            if (!Directory.Exists(inputHashesPath) && File.Exists(inputHashesPath) == false) {
+            if (!Directory.Exists(inputHashesPath) && File.Exists(inputHashesPath) == false)
+            {
                 Console.WriteLine("Could not find " + inputHashesPath);
                 return;
             }
 
-            if (!Directory.Exists(inputStringsPath) && File.Exists(inputStringsPath) == false) {
+            if (!Directory.Exists(inputStringsPath) && File.Exists(inputStringsPath) == false)
+            {
                 Console.WriteLine("Could not find " + inputStringsPath);
                 return;
             }
 
-            if (!Path.IsPathRooted(inputHashesPath)) {
+            if (!Path.IsPathRooted(inputHashesPath))
+            {
                 inputHashesPath = Path.GetFullPath(inputHashesPath);
             }
-            if (!Path.IsPathRooted(inputStringsPath)) {
+            if (!Path.IsPathRooted(inputStringsPath))
+            {
                 inputStringsPath = Path.GetFullPath(inputStringsPath);
             }
 
@@ -77,9 +87,11 @@ namespace HashWrangler {
             hashFuncs["pathcode64gz"] = PathCode64GzStr;
 
             HashFunction HashFunc;
-            try {
+            try
+            {
                 HashFunc = hashFuncs[funcType.ToLower()];
-            } catch (KeyNotFoundException) {
+            } catch (KeyNotFoundException)
+            {
                 HashFunc = StrCode32Str;
                 Console.WriteLine("ERROR: Could not find hash function " + funcType);
                 return;
@@ -96,50 +108,41 @@ namespace HashWrangler {
                     return;
                 }
 
-                ConcurrentBag<string> inputStringsBag = new ConcurrentBag<string>();
-                foreach (var filePath in dictFiles)
-                {
-                    Parallel.ForEach(File.ReadLines(filePath), line => {
-                        inputStringsBag.Add(line);
-                    });
-                    Console.WriteLine(filePath + " read");
-                }
-                List<string> inputStrings = inputStringsBag.ToList<string>();
-                inputStrings.Sort();
-                //TODO: parallalize
-                foreach (string funcName in hashFuncs.Keys)
-                {
-                    HashFunc = hashFuncs[funcName];
-                    var hashesForInputStrings = new List<string>();
-                    foreach (string str in inputStrings)
+                Parallel.ForEach(hashFuncs.Keys, funcName => {
+                    //foreach (string funcName in hashFuncs.Keys)
                     {
-                        var hash = HashFunc(str).ToString();
-                        hashesForInputStrings.Add(str + " " + hash);
-                    }
-                    string hashesForInputStringsPath = "";
-                    if (File.Exists(inputStringsPath))
-                    {
-                        hashesForInputStringsPath = Path.GetDirectoryName(inputStringsPath) + "\\" + Path.GetFileNameWithoutExtension(inputStringsPath);
-                    } else
-                    {
-                        hashesForInputStringsPath = Path.Combine(inputStringsPath, "..") + "\\" + new DirectoryInfo(inputStringsPath).Name + "Strings";
-                    }
+                        HashFunc = hashFuncs[funcName];
+                        foreach (var filePath in dictFiles)
+                        {
+                            Console.WriteLine(funcName + " hashing " + filePath);
 
-                    File.WriteAllLines(hashesForInputStringsPath + "_" + funcName + "HashStringList.txt", hashesForInputStrings.ToArray());
-                }
+                            string outputPath = Path.GetDirectoryName(filePath) + "\\" + Path.GetFileNameWithoutExtension(filePath) + "_" + funcName + "HashStringList.txt";
+                            using (StreamWriter sw = new StreamWriter(outputPath))
+                            {
+                                foreach (string line in File.ReadLines(filePath))
+                                {
+                                    sw.WriteLine(line + " " + HashFunc(line));
+                                }
+                            }
+
+                            Console.WriteLine("Finished " + funcName + " hashing " + filePath);
+                        }
+                    }
+                });
                 return;
             }
 
 
             Console.WriteLine("Read input hashes:");
             List<string> inputHashesList = GetInputHashes(inputHashesPath);
-            if (inputHashesList == null) {
+            if (inputHashesList == null)
+            {
                 return;
             }
 
             //TODO: have GetInputHashes build inputHashesNew directly
             var hashMatches = new Dictionary<string, ConcurrentBag<string>>();
-            foreach(var hash in inputHashesList)
+            foreach (var hash in inputHashesList)
             {
                 hashMatches.Add(hash, new ConcurrentBag<string>());
             }
@@ -188,7 +191,8 @@ namespace HashWrangler {
                 if (matches.Count == 0)
                 {
                     unmatchedHashes.Add(item.Key);
-                } else {
+                } else
+                {
                     if (matches.Count == 1)
                     {
                         matchedHashes.Add(item.Key);
@@ -196,7 +200,8 @@ namespace HashWrangler {
                         matches.TryTake(out match);
                         matchedStrings.Add(match);
                         hashStringMatches.Add(string.Format("{0} {1}", item.Key, match));
-                    } else { //Collision
+                    } else
+                    { //Collision
                         //tex crush it down to uniques since there's input strings havent been checked for duplpicates
                         HashSet<string> matchesUnique = new HashSet<string>();
                         foreach (var match in matches)
@@ -210,7 +215,8 @@ namespace HashWrangler {
                             string match = matchesUnique.First();
                             matchedStrings.Add(match);
                             hashStringMatches.Add(string.Format("{0} {1}", item.Key, match));
-                        } else {
+                        } else
+                        {
                             collisionHashes.Add(item.Key);
                             StringBuilder line = new StringBuilder(item.Key.PadLeft(13));
                             line.Append(" ");
@@ -252,7 +258,8 @@ namespace HashWrangler {
             float unmatchedStringsPercent = 0;
             float matchedStringsPercent = 0;
 
-            if (numInputHashes > 0) {
+            if (numInputHashes > 0)
+            {
                 hashPerMult = 100.0f / (float)numInputHashes;
                 unmatchedHashesPercent = unmatchedHashes.Count * hashPerMult;
                 matchedHashesPercent = matchedHashes.Count * hashPerMult;
@@ -281,24 +288,30 @@ namespace HashWrangler {
             //for directory input:
             //<parent of input path>\<foldername><Hashes | Strings>_<somesuffix>.txt
             string hashesPath = "";
-            if (File.Exists(inputHashesPath)) {
+            if (File.Exists(inputHashesPath))
+            {
                 hashesPath = Path.GetDirectoryName(inputHashesPath) + "\\" + Path.GetFileNameWithoutExtension(inputHashesPath);
-            } else {
+            } else
+            {
                 string parent = Directory.GetParent(inputHashesPath).FullName;
-                hashesPath = Path.Combine(inputHashesPath,"..") + "\\" + new DirectoryInfo(inputHashesPath).Name + "Hashes";
+                hashesPath = Path.Combine(inputHashesPath, "..") + "\\" + new DirectoryInfo(inputHashesPath).Name + "Hashes";
             }
             string stringsPath = "";
-            if (File.Exists(inputStringsPath)) {
+            if (File.Exists(inputStringsPath))
+            {
                 stringsPath = Path.GetDirectoryName(inputStringsPath) + "\\" + Path.GetFileNameWithoutExtension(inputStringsPath);
-            } else {
+            } else
+            {
                 stringsPath = Path.Combine(inputStringsPath, "..") + "\\" + new DirectoryInfo(inputStringsPath).Name + "Strings";
             }
 
             //tex delete since we might not be overwriting and old one could cause confusion
-            if (File.Exists(stringsPath + "_HashStringsCollisions.txt")) {
+            if (File.Exists(stringsPath + "_HashStringsCollisions.txt"))
+            {
                 File.Delete(stringsPath + "_HashStringsCollisions.txt");
             }
-            if (hashStringCollisions.Count > 0) {
+            if (hashStringCollisions.Count > 0)
+            {
                 File.WriteAllLines(stringsPath + "_HashStringsCollisions.txt", hashStringCollisions);
             }
             File.WriteAllLines(stringsPath + "_HashStringMatches.txt", hashStringMatches);
@@ -315,6 +328,11 @@ namespace HashWrangler {
 
         private static List<string> GetFileList(string inputStringsPath)
         {
+            if (!Path.IsPathRooted(inputStringsPath))
+            {
+                inputStringsPath = Path.GetFullPath(inputStringsPath);
+            }
+
             List<string> dictFiles = new List<string>();
             if (File.Exists(inputStringsPath))
             {
@@ -328,7 +346,8 @@ namespace HashWrangler {
             return dictFiles;
         }
 
-        static void ShowUsageInfo() {
+        static void ShowUsageInfo()
+        {
             Console.WriteLine("HashWrangler by tinmantex\n" +
                               "  For comparing lists of hashes against lists of strings and outputting found and unfound lists.\n" +
                               "Usage:\n" +
@@ -337,23 +356,28 @@ namespace HashWrangler {
                               "  Options are case insensitive\n" +
                               "  or\n" +
                               " HashWrangler <dictionary file path>\n" +
-                              "   outputs <dictionary>_<hash func name>HashMatches.txt for each hash function on the input dictionary."
+                              "   outputs <dictionary>_<hash func name>HashStringList.txt for each hash function on the input dictionary."
                               );
         }
 
-        private static Dictionary<string, HashSet<string>> BuildDictionary(string path, HashFunction HashFunc) {
+        private static Dictionary<string, HashSet<string>> BuildDictionary(string path, HashFunction HashFunc)
+        {
             var dictionary = new Dictionary<string, HashSet<string>>();
 
             string[] files = null;
-            if (File.Exists(path)) {
+            if (File.Exists(path))
+            {
                 files = new string[] { path };
             }
-            if (Directory.Exists(path)) {
+            if (Directory.Exists(path))
+            {
                 files = Directory.GetFiles(path, "*.txt");
             }
 
-            if (files!=null) {
-                foreach (string filePath in files) {
+            if (files != null)
+            {
+                foreach (string filePath in files)
+                {
                     ReadDictionary(filePath, HashFunc, ref dictionary);
                 }
             }
@@ -361,9 +385,11 @@ namespace HashWrangler {
             return dictionary;
         }
 
-        private static void ReadDictionary(string path, HashFunction HashFunc, ref Dictionary<string, HashSet<string>> dictionary) {
+        private static void ReadDictionary(string path, HashFunction HashFunc, ref Dictionary<string, HashSet<string>> dictionary)
+        {
             Console.WriteLine("ReadDictionary " + path);
-            if (!File.Exists(path)) {
+            if (!File.Exists(path))
+            {
                 Console.WriteLine("Could not find " + path);
                 return;
             }
@@ -371,50 +397,63 @@ namespace HashWrangler {
             int dups = 0;
 
             string[] lines;
-            try {
+            try
+            {
                 lines = File.ReadAllLines(path);
-            } catch (Exception e) {
+            } catch (Exception e)
+            {
                 Console.WriteLine("Unable to read the dictionary " + path + " " + e.Message);
                 return;
             }
 
-            foreach (string line in lines) {
+            foreach (string line in lines)
+            {
                 var hash = HashFunc(line);
 
                 HashSet<string> stringsForHash;
-                if (dictionary.TryGetValue(hash, out stringsForHash)) {
+                if (dictionary.TryGetValue(hash, out stringsForHash))
+                {
                     bool isNew = stringsForHash.Add(line);
-                    if (!isNew) {
+                    if (!isNew)
+                    {
                         //Console.WriteLine("string " + line + " already exists for hash " + hash);//DEBUGNOW
                         dups++;
-                    } else {
+                    } else
+                    {
                         string strings = String.Join(" | ", stringsForHash.ToArray());
                         //Console.WriteLine("hash collision for " + hash + ": " + strings);//DEBUGNOW
                     }
-                } else {
+                } else
+                {
                     stringsForHash = new HashSet<string>();
                     stringsForHash.Add(line);
                     dictionary.Add(hash, stringsForHash);
                 }
             }
-            if (dups > 0) {
+            if (dups > 0)
+            {
                 Console.WriteLine(dups + " strings from " + Path.GetFileName(path) + " were already in dictionary");//DEBUGNOW
             }
         }
 
-        private static List<string> GetInputHashes(string path) {
+        private static List<string> GetInputHashes(string path)
+        {
             var inputHashes = new HashSet<string>();
 
             string[] files = null;
-            if (File.Exists(path)) {
+            if (File.Exists(path))
+            {
                 files = new string[] { path };
             }
-            if (Directory.Exists(path)) {
+            if (Directory.Exists(path))
+            {
                 files = Directory.GetFiles(path, "*.txt");
             }
 
-            if (files != null) {
-                foreach (string filePath in files) {
+            if (files != null)
+            {
+                foreach (string filePath in files)
+                {
                     ReadInputHashes(filePath, ref inputHashes);
                 }
             }
@@ -422,9 +461,11 @@ namespace HashWrangler {
             return inputHashes.ToList();
         }
 
-        private static void ReadInputHashes(string path, ref HashSet<string> inputHashes) {
+        private static void ReadInputHashes(string path, ref HashSet<string> inputHashes)
+        {
             Console.WriteLine("ReadInputHashes " + path);
-            if (!File.Exists(path)) {
+            if (!File.Exists(path))
+            {
                 Console.WriteLine("Could not find " + path);
                 return;
             }
@@ -432,52 +473,64 @@ namespace HashWrangler {
             int duplicates = 0;
 
             string[] lines;
-            try {
+            try
+            {
                 lines = File.ReadAllLines(path);
-            } catch (Exception e) {
+            } catch (Exception e)
+            {
                 Console.WriteLine("Unable to read inputHashes " + path + " " + e);
                 return;
             }
 
-            foreach (var line in lines) {
+            foreach (var line in lines)
+            {
                 var str32 = line;
                 bool isNew = inputHashes.Add(str32);
-                if (!isNew) {
+                if (!isNew)
+                {
                     duplicates++;
                 }
             }
 
-            if (duplicates > 0) {
+            if (duplicates > 0)
+            {
                 Console.WriteLine("There is " + duplicates + " duplicates in " + path);
             }
         }
 
-        public static string StrCode32Str(string text) {
+        public static string StrCode32Str(string text)
+        {
             var hash = (uint)Hashing.HashFileNameLegacy(text);
             return hash.ToString();
         }
-        public static string StrCode64Str(string text) {
+        public static string StrCode64Str(string text)
+        {
             var hash = Hashing.HashFileNameLegacy(text);
             return hash.ToString();
         }
         //TODO: verify output matches lua PathFileNameCode32 (it was missing in some cases? see mockfox pathfilename note?)
-        public static string PathFileNameCode32Str(string text) {
+        public static string PathFileNameCode32Str(string text)
+        {
             var hash = (uint)Hashing.HashFileNameWithExtension(text);
             return hash.ToString();
         }
-        public static string PathFileNameCode64Str(string text) {
+        public static string PathFileNameCode64Str(string text)
+        {
             ulong hash = Hashing.HashFileNameWithExtension(text);
             return hash.ToString();
         }
         //tex DEBUGNOW TODO name, this is more specific to gzstool dictionary implementation than a general Fox implementation?
-        public static string PathCode64Str(string text) {
+        public static string PathCode64Str(string text)
+        {
             ulong hash = Hashing.HashFileName(text) & 0x3FFFFFFFFFFFF;
             return hash.ToString("x");
         }
 
-        public static string PathCode64GzStr(string text) {
+        public static string PathCode64GzStr(string text)
+        {
             ulong hash = Hashing.HashFileNameLegacy(text);
             return hash.ToString("x");
         }
+
     }
 }

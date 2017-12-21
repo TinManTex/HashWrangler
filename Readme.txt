@@ -34,4 +34,4 @@ See Wrangling Hashes.txt in https://github.com/TinManTex/mgsv-lookup-strings or 
 Alternate usage:
 HashWrangler <dictionary file path>
 
-outputs <dictionary>_<hash func name>HashMatches.txt for each hash function on the input dictionary.
+outputs <dictionary>_<hash func name>HashStringList.txt for each hash function on the input dictionary.
