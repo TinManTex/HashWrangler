@@ -1,5 +1,6 @@
 ﻿using HashWrangler.Utility;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -84,20 +85,28 @@ namespace HashWrangler {
                 return;
             }
 
-            Console.WriteLine("Using HashFunction " + funcType);
-
-            //<hash as string, list of strings for hash> // tex due to collisions need to keep track of multiple strings for hash
-            Dictionary<string, HashSet<string>> dictionary = BuildDictionary(inputStringsPath,HashFunc);
-            if (dictionary==null) {
-                return;
-            }
-
-            List<string> inputStrings = dictionary.SelectMany(d => d.Value).ToList(); //tex could save off initial file ReadAllLines in BuildDictionary but would still have to uniquify it.
-            inputStrings.Sort();
-            //
             if (buildHashesForDict)
             {
                 Console.WriteLine("buildHashesForDict");
+
+                List<string> dictFiles = GetFileList(inputStringsPath);
+
+                if (dictFiles.Count == 0)
+                {
+                    return;
+                }
+
+                ConcurrentBag<string> inputStringsBag = new ConcurrentBag<string>();
+                foreach (var filePath in dictFiles)
+                {
+                    Parallel.ForEach(File.ReadLines(filePath), line => {
+                        inputStringsBag.Add(line);
+                    });
+                    Console.WriteLine(filePath + " read");
+                }
+                List<string> inputStrings = inputStringsBag.ToList<string>();
+                inputStrings.Sort();
+                //TODO: parallalize
                 foreach (string funcName in hashFuncs.Keys)
                 {
                     HashFunc = hashFuncs[funcName];
@@ -116,79 +125,126 @@ namespace HashWrangler {
                         hashesForInputStringsPath = Path.Combine(inputStringsPath, "..") + "\\" + new DirectoryInfo(inputStringsPath).Name + "Strings";
                     }
 
-                    File.WriteAllLines(hashesForInputStringsPath + "_" + funcName + "HashStringMatches.txt", hashesForInputStrings.ToArray());
+                    File.WriteAllLines(hashesForInputStringsPath + "_" + funcName + "HashStringList.txt", hashesForInputStrings.ToArray());
                 }
                 return;
             }
 
 
-            List<string> inputHashes = GetInputHashes(inputHashesPath);
-            if (inputHashes == null) {
+            Console.WriteLine("Read input hashes:");
+            List<string> inputHashesList = GetInputHashes(inputHashesPath);
+            if (inputHashesList == null) {
                 return;
             }
 
-            if (dictionary==null || inputHashes==null) {
+            //TODO: have GetInputHashes build inputHashesNew directly
+            var hashMatches = new Dictionary<string, ConcurrentBag<string>>();
+            foreach(var hash in inputHashesList)
+            {
+                hashMatches.Add(hash, new ConcurrentBag<string>());
+            }
+
+
+            Console.WriteLine("Read input strings:");
+            List<string> files = GetFileList(inputStringsPath);
+
+            if (files.Count == 0)
+            {
                 return;
             }
 
-            var matchedHashes = new HashSet<string>();
-            var unmatchedHashes = new HashSet<string>();
+            Console.WriteLine("Testing strings using HashFunction " + funcType);
 
-            var collisionHashes = new Dictionary<string, HashSet<string>>();
-
-            var matchedStrings = new HashSet<string>();
-            var unmatchedStrings = new HashSet<string>();
-            var collisionStrings = new HashSet<string>();
-
-            Console.WriteLine("Finding strings for hashes");
-            int doneCount = 0;
-            int numInputHashes = inputHashes.Count;
-            int numInputStrings = inputStrings.Count;
-            foreach (string hash in inputHashes) {
-                doneCount++;
-                //Console.WriteLine("[" + doneCount + "/" + numInputHashes + "]");//DEBUG
-
-                HashSet<string> stringsForHash;
-                if (dictionary.TryGetValue(hash, out stringsForHash)) {
-                    //Console.WriteLine("Found string for hash " + hash);//DEBUG
-                    //tex collisions have already been gathered by BuildDictionary by this point, 
-                    //but we only want to output collisions for the input hashes.
-                    if (stringsForHash.Count > 1) {
-                        collisionHashes[hash]=stringsForHash;
-                        foreach (string str in stringsForHash) {
-                            collisionStrings.Add(str);
-                        }
-                    } else {
-                        bool isNew = matchedHashes.Add(hash);
-                        if (!isNew) {
-                            //Console.WriteLine("Hash " + hash + " was already in matchedHashes");
-                        }
-                        foreach (string str in stringsForHash) {
-                            matchedStrings.Add(str);
-                        }
+            foreach (var filePath in files)
+            {
+                Console.WriteLine(filePath);
+                Parallel.ForEach(File.ReadLines(filePath), (Action<string>)(line => {
+                    var hash = HashFunc(line);
+                    ConcurrentBag<string> matches;
+                    if (hashMatches.TryGetValue(hash, out matches))
+                    {
+                        matches.Add(line);
+                    } else
+                    {
+                        //no match 
                     }
+                }));
+            }
+
+            Console.WriteLine("Building output");
+            var matchedHashes = new List<string>();
+            var unmatchedHashes = new List<string>();
+            var collisionHashes = new List<string>();
+
+            var matchedStrings = new List<string>();
+            var collisionStrings = new List<string>();
+
+            var hashStringMatches = new List<string>();
+            var hashStringCollisions = new List<string>();
+
+            foreach (var item in hashMatches)
+            {
+                ConcurrentBag<string> matches = item.Value;
+                if (matches.Count == 0)
+                {
+                    unmatchedHashes.Add(item.Key);
                 } else {
-                    //Console.WriteLine("No string found for hash " + hash);//DEBUG
-                    bool isNew = unmatchedHashes.Add(hash);
-                    if (!isNew) {
-                        //Console.WriteLine("Hash " + hash + " was already in unmatchedHashes");//DEBUGNOW
+                    if (matches.Count == 1)
+                    {
+                        matchedHashes.Add(item.Key);
+                        string match;
+                        matches.TryTake(out match);
+                        matchedStrings.Add(match);
+                        hashStringMatches.Add(string.Format("{0} {1}", item.Key, match));
+                    } else { //Collision
+                        //tex crush it down to uniques since there's input strings havent been checked for duplpicates
+                        HashSet<string> matchesUnique = new HashSet<string>();
+                        foreach (var match in matches)
+                        {
+                            matchesUnique.Add(match);
+                        }
+
+                        if (matchesUnique.Count == 1)
+                        {
+                            matchedHashes.Add(item.Key);
+                            string match = matchesUnique.First();
+                            matchedStrings.Add(match);
+                            hashStringMatches.Add(string.Format("{0} {1}", item.Key, match));
+                        } else {
+                            collisionHashes.Add(item.Key);
+                            StringBuilder line = new StringBuilder(item.Key.PadLeft(13));
+                            line.Append(" ");
+                            foreach (var match in matchesUnique)
+                            {
+                                line.Append(match);
+                                line.Append("||");
+
+                                //collisionStrings.Add(match);
+                            }
+                            hashStringCollisions.Add(line.ToString());
+                        }
                     }
                 }
             }
 
-            
-             foreach (string str in inputStrings) {
-                if (!matchedStrings.Contains(str) && !collisionStrings.Contains(str)) {
-                    unmatchedStrings.Add(str);
-                }
-            }
+            matchedHashes.Sort();
+            unmatchedHashes.Sort();
+            collisionHashes.Sort();
+
+            matchedStrings.Sort();
+            //collisionStrings.Sort();
+
+            hashStringMatches.Sort();
+            hashStringCollisions.Sort();
+
 
             Console.WriteLine("Stats:");
+            int numInputHashes = hashMatches.Count;
+
             int numHashPlaces = numInputHashes.ToString().Length;
             int numStringPlaces = numInputHashes.ToString().Length;
 
             float hashPerMult = numInputHashes;
-            float stringPerMult = 0;
 
             float unmatchedHashesPercent = 0;
             float matchedHashesPercent = 0;
@@ -202,39 +258,22 @@ namespace HashWrangler {
                 matchedHashesPercent = matchedHashes.Count * hashPerMult;
                 collisionHashesPercent = collisionHashes.Count * hashPerMult;
             }
+            /*
             if (numInputStrings > 0) {
-                stringPerMult = 100.0f / (float)numInputStrings;
-                unmatchedStringsPercent = unmatchedStrings.Count * stringPerMult;
-                matchedStringsPercent = matchedStrings.Count * stringPerMult;
+                float stringPerMult = 100.0f / (float)numInputStrings;
+                unmatchedStringsPercent = unmatchedStringsNew.Count * stringPerMult;
+                matchedStringsPercent = matchedStringsNew.Count * stringPerMult;
             }
+            */
 
             Console.WriteLine("unmatchedHashes    [" + unmatchedHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + unmatchedHashesPercent + "%");
             Console.WriteLine("matchedHashes      [" + matchedHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + matchedHashesPercent + "%");
             Console.WriteLine("collsionHashes     [" + collisionHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + collisionHashesPercent + "%");
-            Console.WriteLine("unmatchedStrings   [" + unmatchedStrings.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + unmatchedStringsPercent + "%");
-            Console.WriteLine("matchedStrings     [" + matchedStrings.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + matchedStringsPercent + "%");
+            //Console.WriteLine("unmatchedStrings   [" + unmatchedStringsNew.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + unmatchedStringsPercent + "%");
+            //Console.WriteLine("matchedStrings     [" + matchedStringsNew.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + matchedStringsPercent + "%");
+
 
             Console.WriteLine("Writing out files");
-
-            var unmatchedHashesList = unmatchedHashes.OrderBy(s => s, StringComparer.InvariantCultureIgnoreCase).ToArray<string>();
-            var unmatchedStringsList = unmatchedStrings.OrderBy(s => s, StringComparer.InvariantCultureIgnoreCase).ToArray<string>();
-            var matchedHashesList = matchedHashes.OrderBy(s => s, StringComparer.InvariantCultureIgnoreCase).ToArray<string>();
-            var matchedStringsList = matchedStrings.OrderBy(s => s, StringComparer.InvariantCultureIgnoreCase).ToArray<string>();
-
-            var hashStringsCollisions = new List<string>();
-            foreach (var item in collisionHashes) {
-                string line = item.Key + " " + String.Join("||", item.Value.ToArray());
-                hashStringsCollisions.Add(line);
-            }
-
-            //tex using matchedStrings so its sorted
-            var hashStringMatches = new List<string>();
-            foreach (var str in matchedStringsList) {
-                //tex killing some performance here, but don't have a string>hash lookup set up.
-                var hash = HashFunc(str).ToString();
-                string line = hash.PadLeft(13) + " " + str;
-                hashStringMatches.Add(line);
-            }
 
             //tex output files will be 
             //for single file input:
@@ -259,19 +298,34 @@ namespace HashWrangler {
             if (File.Exists(stringsPath + "_HashStringsCollisions.txt")) {
                 File.Delete(stringsPath + "_HashStringsCollisions.txt");
             }
-            if (hashStringsCollisions.Count > 0) {
-                File.WriteAllLines(stringsPath + "_HashStringsCollisions.txt", hashStringsCollisions.ToArray());
+            if (hashStringCollisions.Count > 0) {
+                File.WriteAllLines(stringsPath + "_HashStringsCollisions.txt", hashStringCollisions);
             }
-            File.WriteAllLines(stringsPath + "_HashStringMatches.txt", hashStringMatches.ToArray());
+            File.WriteAllLines(stringsPath + "_HashStringMatches.txt", hashStringMatches);
 
-            File.WriteAllLines(hashesPath + "_unmatchedHashes.txt", unmatchedHashesList);
-            File.WriteAllLines(hashesPath + "_matchedHashes.txt", matchedHashesList);
+            File.WriteAllLines(hashesPath + "_unmatchedHashes.txt", unmatchedHashes);
+            File.WriteAllLines(hashesPath + "_matchedHashes.txt", matchedHashes);
 
-            File.WriteAllLines(stringsPath + "_unmatchedStrings.txt", unmatchedStringsList);
-            File.WriteAllLines(stringsPath + "_matchedStrings.txt", matchedStringsList);
+            //File.WriteAllLines(stringsPath + "_unmatchedStrings.txt", unmatchedStringsList);
+            File.WriteAllLines(stringsPath + "_matchedStrings.txt", matchedStrings);
 
 
             Console.WriteLine("All done");
+        }
+
+        private static List<string> GetFileList(string inputStringsPath)
+        {
+            List<string> dictFiles = new List<string>();
+            if (File.Exists(inputStringsPath))
+            {
+                dictFiles.Add(inputStringsPath);
+            }
+            if (Directory.Exists(inputStringsPath))
+            {
+                dictFiles = Directory.GetFiles(inputStringsPath, "*.txt").ToList<string>();
+            }
+
+            return dictFiles;
         }
 
         static void ShowUsageInfo() {
