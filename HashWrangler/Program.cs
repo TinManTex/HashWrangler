@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace HashWrangler
@@ -77,6 +78,9 @@ namespace HashWrangler
             {
                 inputStringsPath = Path.GetFullPath(inputStringsPath);
             }
+
+            inputHashesPath = Regex.Replace(inputHashesPath, @"\\", "/");
+            inputStringsPath = Regex.Replace(inputStringsPath, @"\\", "/");
 
             Dictionary<string, HashFunction> hashFuncs = new Dictionary<string, HashFunction>();
             hashFuncs["strcode32"] = StrCode32Str;
@@ -225,7 +229,7 @@ namespace HashWrangler
                                 line.Append(match);
                                 line.Append("||");
 
-                                //collisionStrings.Add(match);
+                                collisionStrings.Add(match);
                             }
                             hashStringCollisions.Add(line.ToString());
                         }
@@ -238,7 +242,7 @@ namespace HashWrangler
             collisionHashes.Sort();
 
             matchedStrings.Sort();
-            //collisionStrings.Sort();
+            collisionStrings.Sort();
 
             hashStringMatches.Sort();
             hashStringCollisions.Sort();
@@ -305,10 +309,17 @@ namespace HashWrangler
                 stringsPath = Path.Combine(inputStringsPath, "..") + "\\" + new DirectoryInfo(inputStringsPath).Name + "Strings";
             }
 
+            hashesPath = Regex.Replace(hashesPath, @"\\", "/");
+            stringsPath = Regex.Replace(stringsPath, @"\\", "/");
+
             //tex delete since we might not be overwriting and old one could cause confusion
             if (File.Exists(stringsPath + "_HashStringsCollisions.txt"))
             {
                 File.Delete(stringsPath + "_HashStringsCollisions.txt");
+            }
+            if (File.Exists(stringsPath + "_collisionStrings.txt"))
+            {
+                File.Delete(stringsPath + "_collisionStrings.txt");
             }
             if (hashStringCollisions.Count > 0)
             {
@@ -321,7 +332,10 @@ namespace HashWrangler
 
             //File.WriteAllLines(stringsPath + "_unmatchedStrings.txt", unmatchedStringsList);
             File.WriteAllLines(stringsPath + "_matchedStrings.txt", matchedStrings);
-
+            if (collisionStrings.Count > 0)
+            {
+                File.WriteAllLines(stringsPath + "_collisionStrings.txt", collisionStrings);
+            }
 
             Console.WriteLine("All done");
         }
