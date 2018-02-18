@@ -6,12 +6,23 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace HashWrangler.Utility
+namespace Utility
 {
-    //tex from gzstool with some stuff commented out
-    //could just import gzstool.core assembly
+    //tex mostly from gzstool with some stuff commented out
     public static class Hashing
     {
+        public delegate string HashFunction(string str);
+
+        public static Dictionary<string, HashFunction> hashFuncs = new Dictionary<string, HashFunction> {
+            {"strcode32", StrCode32Str},
+            {"strcode64", StrCode64Str},
+            {"pathfilenamecode32", PathFileNameCode32Str},
+            {"pathfilenamecode64", PathFileNameCode64Str},//tex for want of a better name
+            {"pathcode64", PathCode64Str},
+            {"pathcode64gz", PathCode64GzStr},
+            {"extensioncode64", ExtensionCode64Str },
+        };
+
         private static readonly MD5 Md5 = MD5.Create();
         private static readonly Dictionary<ulong, string> HashNameDictionary = new Dictionary<ulong, string>();
 
@@ -113,6 +124,7 @@ namespace HashWrangler.Utility
             "nta",
             "obr",
             "obrb",
+            "param",
             "parts",
             "path",
             "pftxs",
@@ -157,6 +169,7 @@ namespace HashWrangler.Utility
             "vo.evf",
             "vpc",
             "wem",
+            "wmv",
             "xml"
         };
 
@@ -208,8 +221,9 @@ namespace HashWrangler.Utility
                 ? maskedHash | MetaFlag
                 : maskedHash;
         }
-        
-        public static ulong HashFileNameLegacy(string text, bool removeExtension = true)
+
+        //HashFileNameLegacy in GzsTool.Core
+        public static ulong StrCode(string text, bool removeExtension = true)
         {
             if (removeExtension)
             {
@@ -365,6 +379,48 @@ namespace HashWrangler.Utility
             }
 
             return extension;
+        }
+
+
+        //Hashfuncs
+        public static string StrCode32Str(string text)
+        {
+            var hash = (uint)StrCode(text);
+            return hash.ToString();
+        }
+        public static string StrCode64Str(string text)
+        {
+            var hash = StrCode(text);
+            return hash.ToString();
+        }
+        //TODO: verify output matches lua PathFileNameCode32 (it was missing in some cases? see mockfox pathfilename note?)
+        public static string PathFileNameCode32Str(string text)
+        {
+            var hash = (uint)HashFileNameWithExtension(text);
+            return hash.ToString();
+        }
+        public static string PathFileNameCode64Str(string text)
+        {
+            ulong hash = Hashing.HashFileNameWithExtension(text);
+            return hash.ToString();
+        }
+        //tex DEBUGNOW TODO name, this is more specific to gzstool dictionary implementation than a general Fox implementation?
+        public static string PathCode64Str(string text)
+        {
+            ulong hash = HashFileName(text) & 0x3FFFFFFFFFFFF;
+            return hash.ToString("x");
+        }
+
+        public static string PathCode64GzStr(string text)
+        {
+            ulong hash = StrCode(text);
+            return hash.ToString("x");
+        }
+
+        public static string ExtensionCode64Str(string text)
+        {
+            ulong hash = HashFileExtension(text);
+            return hash.ToString();
         }
     }
 }

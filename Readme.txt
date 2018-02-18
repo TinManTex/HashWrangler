@@ -15,6 +15,7 @@ PathFileNameCode64
 PathFileNameCode32
 PathCode64
 PathCode64Gz
+ExtensionCode64
 Options are case insensitive
 
 Output:

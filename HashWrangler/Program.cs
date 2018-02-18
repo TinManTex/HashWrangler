@@ -1,5 +1,4 @@
-﻿using HashWrangler.Utility;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,23 +7,12 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using static Utility.Hashing;
 
 namespace HashWrangler
 {
     class Program
     {
-        delegate string HashFunction(string str);
-
-        //SYNC with whatever you output
-        static string[] outputSuffixes = {
-            "_HashStringsCollisions",
-            "_HashStringMatches",
-            "_unmatchedHashes",
-            "_matchedHashes",
-            "_unmatchedStrings",
-            "_matchedStrings"
-        };
-
         static void Main(string[] args)
         {
             if (args.Length == 0)
@@ -58,6 +46,8 @@ namespace HashWrangler
                 }
             }
 
+            bool tryVariations = false;//WIP
+
             if (!Directory.Exists(inputHashesPath) && File.Exists(inputHashesPath) == false)
             {
                 Console.WriteLine("Could not find " + inputHashesPath);
@@ -82,13 +72,8 @@ namespace HashWrangler
             inputHashesPath = Regex.Replace(inputHashesPath, @"\\", "/");
             inputStringsPath = Regex.Replace(inputStringsPath, @"\\", "/");
 
-            Dictionary<string, HashFunction> hashFuncs = new Dictionary<string, HashFunction>();
-            hashFuncs["strcode32"] = StrCode32Str;
-            hashFuncs["strcode64"] = StrCode64Str;
-            hashFuncs["pathfilenamecode32"] = PathFileNameCode32Str;
-            hashFuncs["pathfilenamecode64"] = PathFileNameCode64Str;//tex for want of a better name
-            hashFuncs["pathcode64"] = PathCode64Str;
-            hashFuncs["pathcode64gz"] = PathCode64GzStr;
+
+
 
             HashFunction HashFunc;
             try
@@ -174,6 +159,41 @@ namespace HashWrangler
                     } else
                     {
                         //no match 
+                    }
+
+                    //WIP
+                    if (tryVariations)
+                    {
+                        hash = HashFunc(line.ToLower());
+                        if (hashMatches.TryGetValue(hash, out matches))
+                        {
+                            matches.Add(line.ToLower());
+                        } else
+                        {
+                            //no match 
+                        }
+
+                        hash = HashFunc(line.ToUpper());
+                        if (hashMatches.TryGetValue(hash, out matches))
+                        {
+                            matches.Add(line.ToUpper());
+                        } else
+                        {
+                            //no match 
+                        }
+
+                        if (line.Length > 1)
+                        {
+                            string capFirst = char.ToUpper(line[0]) + line.Substring(1);
+                            hash = HashFunc(capFirst);
+                            if (hashMatches.TryGetValue(hash, out matches))
+                            {
+                                matches.Add(capFirst);
+                            } else
+                            {
+                                //no match 
+                            }
+                        }
                     }
                 }));
             }
@@ -347,17 +367,17 @@ namespace HashWrangler
                 inputStringsPath = Path.GetFullPath(inputStringsPath);
             }
 
-            List<string> dictFiles = new List<string>();
+            List<string> fileList = new List<string>();
             if (File.Exists(inputStringsPath))
             {
-                dictFiles.Add(inputStringsPath);
+                fileList.Add(inputStringsPath);
             }
             if (Directory.Exists(inputStringsPath))
             {
-                dictFiles = Directory.GetFiles(inputStringsPath, "*.txt").ToList<string>();
+                fileList = Directory.GetFiles(inputStringsPath, "*.txt", SearchOption.AllDirectories).ToList<string>();
             }
 
-            return dictFiles;
+            return fileList;
         }
 
         static void ShowUsageInfo()
@@ -461,7 +481,7 @@ namespace HashWrangler
             }
             if (Directory.Exists(path))
             {
-                files = Directory.GetFiles(path, "*.txt");
+                files = Directory.GetFiles(path, "*.txt",SearchOption.AllDirectories);
             }
 
             if (files != null)
@@ -512,39 +532,7 @@ namespace HashWrangler
             }
         }
 
-        public static string StrCode32Str(string text)
-        {
-            var hash = (uint)Hashing.HashFileNameLegacy(text);
-            return hash.ToString();
-        }
-        public static string StrCode64Str(string text)
-        {
-            var hash = Hashing.HashFileNameLegacy(text);
-            return hash.ToString();
-        }
-        //TODO: verify output matches lua PathFileNameCode32 (it was missing in some cases? see mockfox pathfilename note?)
-        public static string PathFileNameCode32Str(string text)
-        {
-            var hash = (uint)Hashing.HashFileNameWithExtension(text);
-            return hash.ToString();
-        }
-        public static string PathFileNameCode64Str(string text)
-        {
-            ulong hash = Hashing.HashFileNameWithExtension(text);
-            return hash.ToString();
-        }
-        //tex DEBUGNOW TODO name, this is more specific to gzstool dictionary implementation than a general Fox implementation?
-        public static string PathCode64Str(string text)
-        {
-            ulong hash = Hashing.HashFileName(text) & 0x3FFFFFFFFFFFF;
-            return hash.ToString("x");
-        }
 
-        public static string PathCode64GzStr(string text)
-        {
-            ulong hash = Hashing.HashFileNameLegacy(text);
-            return hash.ToString("x");
-        }
 
     }
 }
