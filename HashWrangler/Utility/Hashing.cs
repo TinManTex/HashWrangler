@@ -17,9 +17,9 @@ namespace Utility
             {"strcode32", StrCode32Str},
             {"strcode64", StrCode64Str},
             {"pathfilenamecode32", PathFileNameCode32Str},
-            {"pathfilenamecode64", PathFileNameCode64Str},//tex for want of a better name
-            {"pathcode64", PathCode64Str},
-            {"pathcode64gz", PathCode64GzStr},
+            {"pathfilenamecode64", PathFileNameCode64Str},//tex for want of a better name, to match PathFileNameCode32 which named from lua function
+            {"pathcode64", PathCode64Str},//tex HashFileName as hex hashes (used by GzsTool as qar_dictionary)
+            {"pathcode64gz", PathCode64GzStr},//tex equivalent to StrCode Hex.
             {"extensioncode64", ExtensionCode64Str },
         };
 
@@ -29,7 +29,7 @@ namespace Utility
         //tex OFF private static readonly Dictionary<byte[], string> Md5HashNameDictionary =
           //  new Dictionary<byte[], string>(new StructuralEqualityComparer<byte[]>());
 
-        private static readonly List<string> FileExtensions = new List<string>
+        public static readonly List<string> FileExtensions = new List<string>
         {
             "1.ftexs",
             "1.nav2",
@@ -175,6 +175,7 @@ namespace Utility
 
         private static readonly Dictionary<ulong, string> ExtensionsMap = FileExtensions.ToDictionary(HashFileExtension);
 
+        const ulong HashMask = 0x3FFFFFFFFFFFF; //TODO: ?? why this? is it ExtensionMask or what?
         public const ulong MetaFlag = 0x4000000000000;
 
         public static ulong HashFileExtension(string fileExtension) //from private to public
@@ -212,10 +213,16 @@ namespace Utility
             byte[] seed1Bytes = new byte[sizeof(ulong)];
             for (int i = text.Length - 1, j = 0; i >= 0 && j < sizeof(ulong); i--, j++)
             {
-                seed1Bytes[j] = Convert.ToByte(text[i]);
+                //tex DEBUGNOW otherwise has exception on invalid chars
+                try {
+                    seed1Bytes[j] = Convert.ToByte(text[i]);
+                }
+                catch {
+                    return 0; //DEBUGNOW
+                }
             }
             ulong seed1 = BitConverter.ToUInt64(seed1Bytes, 0);
-            ulong maskedHash = CityHash.CityHash.CityHash64WithSeeds(text, seed0, seed1) & 0x3FFFFFFFFFFFF;
+            ulong maskedHash = CityHash.CityHash.CityHash64WithSeeds(text, seed0, seed1) & HashMask;
 
             return metaFlag
                 ? maskedHash | MetaFlag
@@ -282,7 +289,7 @@ namespace Utility
             string fileExtension;
 
             ulong extensionHash = hash >> 51;
-            ulong pathHash = hash & 0x3FFFFFFFFFFFF;
+            ulong pathHash = hash & HashMask;
 
             fileName = "";
             if (!HashNameDictionary.TryGetValue(pathHash, out filePath))
@@ -326,7 +333,7 @@ namespace Utility
         {
             foreach (var line in File.ReadAllLines(path))
             {
-                ulong hash = HashFileName(line) & 0x3FFFFFFFFFFFF;
+                ulong hash = HashFileName(line) & HashMask;
                 if (HashNameDictionary.ContainsKey(hash) == false)
                 {
                     HashNameDictionary.Add(hash, line);
@@ -393,24 +400,34 @@ namespace Utility
             var hash = StrCode(text);
             return hash.ToString();
         }
+
         //TODO: verify output matches lua PathFileNameCode32 (it was missing in some cases? see mockfox pathfilename note?)
         public static string PathFileNameCode32Str(string text)
         {
             var hash = (uint)HashFileNameWithExtension(text);
             return hash.ToString();
         }
+        /// <summary>
+        /// for want of a better name, to match PathFileNameCode32 which named from lua function
+        /// </summary>
         public static string PathFileNameCode64Str(string text)
         {
             ulong hash = Hashing.HashFileNameWithExtension(text);
             return hash.ToString();
         }
         //tex DEBUGNOW TODO name, this is more specific to gzstool dictionary implementation than a general Fox implementation?
+        /// <summary>
+        /// HashFileName as hex hashes (used by GzsTool as qar_dictionary)
+        /// </summary>
         public static string PathCode64Str(string text)
         {
-            ulong hash = HashFileName(text) & 0x3FFFFFFFFFFFF;
+            ulong hash = HashFileName(text) & HashMask;
             return hash.ToString("x");
         }
 
+        /// <summary>
+        /// equivalent to StrCode Hex.
+        /// </summary>
         public static string PathCode64GzStr(string text)
         {
             ulong hash = StrCode(text);

@@ -30,6 +30,8 @@ Output:
 
 Files with output suffixes in their names will not be read as input.
 
+Hashes are mostly in Uint32 or Uint64 depending on the hash function. PathCode64/Gz is big-endian hex. 
+
 See Wrangling Hashes.txt in https://github.com/TinManTex/mgsv-lookup-strings or http://metalgearmodding.wikia.com/wiki/Hash_Wrangling for more info.
 
 Alternate usage:

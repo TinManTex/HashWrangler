@@ -2,17 +2,30 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Utility;
 using static Utility.Hashing;
 
 namespace HashWrangler
 {
     class Program
     {
+        class RunSettings
+        {
+            public string inputHashesPath = null;
+            public string inputStringsPath = null;
+            public string funcType = "StrCode32";
+
+            public bool tryVariations = false;//WIP DEBUGNOW trouble is this fires off alot more collisions for StrCode32 depending on input
+            public bool tryExtensions = false;
+            public bool hashesToHex = false;
+        }
+
         static void Main(string[] args)
         {
             if (args.Length == 0)
@@ -21,184 +34,104 @@ namespace HashWrangler
                 return;
             }
 
-            string inputHashesPath = args[0];
-            string inputStringsPath = null;
+            RunSettings run = new RunSettings();
+
+            run.inputHashesPath = args[0];
+            run.inputStringsPath = null;
             if (args.Count() > 1)
             {
-                inputStringsPath = args[1];
+                run.inputStringsPath = args[1];
             }
-
-            //tex hashwrangler <strings path>
-            bool buildHashesForDict = false;
-            if (inputStringsPath == null)
-            {
-                buildHashesForDict = true;
-                inputStringsPath = inputHashesPath;
-            }
-
-            string funcType = "StrCode32";
 
             if (args.Count() > 3)
             {
                 if (args[2].ToLower() == "-hashfunction" || args[2].ToLower() == "-h")
                 {
-                    funcType = args[3];
+                    run.funcType = args[3];
                 }
             }
 
-            bool tryVariations = false;//WIP
 
-            if (!Directory.Exists(inputHashesPath) && File.Exists(inputHashesPath) == false)
+            //tex hashwrangler <strings path>
+            if (run.inputStringsPath == null)
             {
-                Console.WriteLine("Could not find " + inputHashesPath);
+                run.inputStringsPath = run.inputHashesPath;
+
+                Console.WriteLine("Building hashes for strings:");
+                List<string> stringsFilesPaths = GetFileList(run.inputStringsPath);
+                if (stringsFilesPaths.Count == 0)
+                {
+                    Console.WriteLine($"Could not find any input strings in {run.inputStringsPath}");
+                    return;
+                }
+                BuildHashesForDict(stringsFilesPaths);
                 return;
             }
 
-            if (!Directory.Exists(inputStringsPath) && File.Exists(inputStringsPath) == false)
+
+            if (!Directory.Exists(run.inputHashesPath) && File.Exists(run.inputHashesPath) == false)
             {
-                Console.WriteLine("Could not find " + inputStringsPath);
+                Console.WriteLine("Could not find " + run.inputHashesPath);
                 return;
             }
 
-            if (!Path.IsPathRooted(inputHashesPath))
+            if (!Directory.Exists(run.inputStringsPath) && File.Exists(run.inputStringsPath) == false)
             {
-                inputHashesPath = Path.GetFullPath(inputHashesPath);
-            }
-            if (!Path.IsPathRooted(inputStringsPath))
-            {
-                inputStringsPath = Path.GetFullPath(inputStringsPath);
+                Console.WriteLine("Could not find " + run.inputStringsPath);
+                return;
             }
 
-            inputHashesPath = Regex.Replace(inputHashesPath, @"\\", "/");
-            inputStringsPath = Regex.Replace(inputStringsPath, @"\\", "/");
+            if (!Path.IsPathRooted(run.inputHashesPath))
+            {
+                run.inputHashesPath = Path.GetFullPath(run.inputHashesPath);
+            }
+            run.inputHashesPath = Regex.Replace(run.inputHashesPath, @"\\", "/");
 
 
-
+            if (!Path.IsPathRooted(run.inputStringsPath))
+            {
+                run.inputStringsPath = Path.GetFullPath(run.inputStringsPath);
+            }
+            run.inputStringsPath = Regex.Replace(run.inputStringsPath, @"\\", "/");
 
             HashFunction HashFunc;
             try
             {
-                HashFunc = hashFuncs[funcType.ToLower()];
+                HashFunc = hashFuncs[run.funcType.ToLower()];
             } catch (KeyNotFoundException)
             {
                 HashFunc = StrCode32Str;
-                Console.WriteLine("ERROR: Could not find hash function " + funcType);
+                Console.WriteLine("ERROR: Could not find hash function " + run.funcType);
                 return;
             }
 
-            if (buildHashesForDict)
-            {
-                Console.WriteLine("buildHashesForDict");
-
-                List<string> dictFiles = GetFileList(inputStringsPath);
-
-                if (dictFiles.Count == 0)
-                {
-                    return;
-                }
-
-                Parallel.ForEach(hashFuncs.Keys, funcName => {
-                    //foreach (string funcName in hashFuncs.Keys)
-                    {
-                        HashFunc = hashFuncs[funcName];
-                        foreach (var filePath in dictFiles)
-                        {
-                            Console.WriteLine(funcName + " hashing " + filePath);
-
-                            string outputPath = Path.GetDirectoryName(filePath) + "\\" + Path.GetFileNameWithoutExtension(filePath) + "_" + funcName + "HashStringList.txt";
-                            using (StreamWriter sw = new StreamWriter(outputPath))
-                            {
-                                foreach (string line in File.ReadLines(filePath))
-                                {
-                                    sw.WriteLine(line + " " + HashFunc(line));
-                                }
-                            }
-
-                            Console.WriteLine("Finished " + funcName + " hashing " + filePath);
-                        }
-                    }
-                });
-                return;
-            }
-
-
-            Console.WriteLine("Read input hashes:");
-            List<string> inputHashesList = GetInputHashes(inputHashesPath);
+            Console.WriteLine("Reading input hashes:");
+            List<string> inputHashesList = GetInputHashes(run.inputHashesPath, run.hashesToHex);
             if (inputHashesList == null)
             {
+                Console.WriteLine($"Could not find any input hashes in {run.inputHashesPath}");
                 return;
             }
 
-            //TODO: have GetInputHashes build inputHashesNew directly
-            var hashMatches = new Dictionary<string, ConcurrentBag<string>>();
-            foreach (var hash in inputHashesList)
+            Console.WriteLine("Building strings file list");
+            List<string> inputStringsFiles = GetFileList(run.inputStringsPath);
+            if (inputStringsFiles.Count == 0)
             {
-                hashMatches.Add(hash, new ConcurrentBag<string>());
-            }
-
-
-            Console.WriteLine("Read input strings:");
-            List<string> files = GetFileList(inputStringsPath);
-
-            if (files.Count == 0)
-            {
+                Console.WriteLine($"Could not find any input strings in {run.inputStringsPath}");
                 return;
             }
 
-            Console.WriteLine("Testing strings using HashFunction " + funcType);
-
-            foreach (var filePath in files)
-            {
-                Console.WriteLine(filePath);
-                Parallel.ForEach(File.ReadLines(filePath), (Action<string>)(line => {
-                    var hash = HashFunc(line);
-                    ConcurrentBag<string> matches;
-                    if (hashMatches.TryGetValue(hash, out matches))
-                    {
-                        matches.Add(line);
-                    } else
-                    {
-                        //no match 
-                    }
-
-                    //WIP
-                    if (tryVariations)
-                    {
-                        hash = HashFunc(line.ToLower());
-                        if (hashMatches.TryGetValue(hash, out matches))
-                        {
-                            matches.Add(line.ToLower());
-                        } else
-                        {
-                            //no match 
-                        }
-
-                        hash = HashFunc(line.ToUpper());
-                        if (hashMatches.TryGetValue(hash, out matches))
-                        {
-                            matches.Add(line.ToUpper());
-                        } else
-                        {
-                            //no match 
-                        }
-
-                        if (line.Length > 1)
-                        {
-                            string capFirst = char.ToUpper(line[0]) + line.Substring(1);
-                            hash = HashFunc(capFirst);
-                            if (hashMatches.TryGetValue(hash, out matches))
-                            {
-                                matches.Add(capFirst);
-                            } else
-                            {
-                                //no match 
-                            }
-                        }
-                    }
-                }));
-            }
+            Console.WriteLine($"Testing strings using HashFunction {run.funcType}:");
+            var hashMatches = TestStrings(run, HashFunc, inputHashesList, inputStringsFiles);
 
             Console.WriteLine("Building output");
+            BuildOutput(run, hashMatches);
+
+            Console.WriteLine("All done");
+        }
+
+        private static void BuildOutput(RunSettings run, Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches)
+        {
             var matchedHashes = new List<string>();
             var unmatchedHashes = new List<string>();
             var collisionHashes = new List<string>();
@@ -211,51 +144,37 @@ namespace HashWrangler
 
             foreach (var item in hashMatches)
             {
-                ConcurrentBag<string> matches = item.Value;
+                var hash = item.Key;
+                var matches = item.Value;
+
                 if (matches.Count == 0)
                 {
                     unmatchedHashes.Add(item.Key);
-                } else
-                {
-                    if (matches.Count == 1)
-                    {
-                        matchedHashes.Add(item.Key);
-                        string match;
-                        matches.TryTake(out match);
-                        matchedStrings.Add(match);
-                        hashStringMatches.Add(string.Format("{0} {1}", item.Key, match));
-                    } else
-                    { //Collision
-                        //tex crush it down to uniques since there's input strings havent been checked for duplpicates
-                        HashSet<string> matchesUnique = new HashSet<string>();
-                        foreach (var match in matches)
-                        {
-                            matchesUnique.Add(match);
-                        }
-
-                        if (matchesUnique.Count == 1)
-                        {
-                            matchedHashes.Add(item.Key);
-                            string match = matchesUnique.First();
-                            matchedStrings.Add(match);
-                            hashStringMatches.Add(string.Format("{0} {1}", item.Key, match));
-                        } else
-                        {
-                            collisionHashes.Add(item.Key);
-                            StringBuilder line = new StringBuilder(item.Key.PadLeft(13));
-                            line.Append(" ");
-                            foreach (var match in matchesUnique)
-                            {
-                                line.Append(match);
-                                line.Append("||");
-
-                                collisionStrings.Add(match);
-                            }
-                            hashStringCollisions.Add(line.ToString());
-                        }
-                    }
+                    continue;
                 }
-            }
+
+                if (matches.Count == 1)
+                {
+                    matchedHashes.Add(hash);
+                    string match = matches.First().Key;
+                    matchedStrings.Add(match);
+                    hashStringMatches.Add($"{hash} {match}");
+                    continue;
+                }
+
+                //Collision
+                collisionHashes.Add(hash);
+                StringBuilder line = new StringBuilder(hash.PadLeft(13));
+                line.Append(" ");
+                foreach (var match in matches.Keys)
+                {
+                    collisionStrings.Add(match);
+
+                    line.Append(match);
+                    line.Append("||");
+                }
+                hashStringCollisions.Add(line.ToString());
+            }//foreach hashMatches
 
             matchedHashes.Sort();
             unmatchedHashes.Sort();
@@ -312,21 +231,21 @@ namespace HashWrangler
             //for directory input:
             //<parent of input path>\<foldername><Hashes | Strings>_<somesuffix>.txt
             string hashesPath = "";
-            if (File.Exists(inputHashesPath))
+            if (File.Exists(run.inputHashesPath))
             {
-                hashesPath = Path.GetDirectoryName(inputHashesPath) + "\\" + Path.GetFileNameWithoutExtension(inputHashesPath);
+                hashesPath = Path.GetDirectoryName(run.inputHashesPath) + "\\" + Path.GetFileNameWithoutExtension(run.inputHashesPath);
             } else
             {
-                string parent = Directory.GetParent(inputHashesPath).FullName;
-                hashesPath = Path.Combine(inputHashesPath, "..") + "\\" + new DirectoryInfo(inputHashesPath).Name + "Hashes";
+                string parent = Directory.GetParent(run.inputHashesPath).FullName;
+                hashesPath = Path.Combine(run.inputHashesPath, "..") + "\\" + new DirectoryInfo(run.inputHashesPath).Name + "Hashes";
             }
             string stringsPath = "";
-            if (File.Exists(inputStringsPath))
+            if (File.Exists(run.inputStringsPath))
             {
-                stringsPath = Path.GetDirectoryName(inputStringsPath) + "\\" + Path.GetFileNameWithoutExtension(inputStringsPath);
+                stringsPath = Path.GetDirectoryName(run.inputStringsPath) + "\\" + Path.GetFileNameWithoutExtension(run.inputStringsPath);
             } else
             {
-                stringsPath = Path.Combine(inputStringsPath, "..") + "\\" + new DirectoryInfo(inputStringsPath).Name + "Strings";
+                stringsPath = Path.Combine(run.inputStringsPath, "..") + "\\" + new DirectoryInfo(run.inputStringsPath).Name + "Strings";
             }
 
             hashesPath = Regex.Replace(hashesPath, @"\\", "/");
@@ -356,8 +275,142 @@ namespace HashWrangler
             {
                 File.WriteAllLines(stringsPath + "_collisionStrings.txt", collisionStrings);
             }
+        }
 
-            Console.WriteLine("All done");
+        /// <summary>
+        /// Tests all strings in all files in inputStringsFiles using HashFunc
+        /// If a match is found it's added to hashMatches which is a dictionary of hash, list<matches> (since multiple strings can match a hash aka a collision)
+        /// </summary>
+        /// <returns>
+        /// hashMatches
+        /// </returns>
+        private static Dictionary<string, ConcurrentDictionary<string, bool>> TestStrings(RunSettings run, HashFunction HashFunc, List<string> inputHashesList, List<string> inputStringsFiles)
+        {
+            bool isPathCode = false;
+            if (run.funcType.ToLower().Contains("pathcode"))//GOTCHA: not to be confused with pathfilenamecode which retains it's extension
+            {
+                isPathCode = true;
+            }
+
+            // Prep hashMatches with input hashes
+            // using ConcurrentDictionary<string, byte> as a concurrent hashset
+            var hashMatches = new Dictionary<string, ConcurrentDictionary<string, bool>>();
+            foreach (var hash in inputHashesList)
+            {
+                hashMatches.Add(hash, new ConcurrentDictionary<string, bool>());
+            }
+
+            foreach (var filePath in inputStringsFiles)
+            {
+                Console.WriteLine(filePath);
+                var lines = File.ReadLines(filePath);
+                //Parallel.ForEach(File.ReadLines(filePath), (Action<string>)(line => {
+                foreach (var lineX in lines)
+                {
+                    var line = lineX;//DEBUGNOW
+
+                    if (isPathCode)
+                    {
+                        line = FixPathCodePath(line);
+                    }
+
+                    AddMatch(hashMatches, HashFunc, line);
+
+                    if (run.tryVariations)
+                    {
+                        AddMatch(hashMatches, HashFunc, line.ToLower());
+                        AddMatch(hashMatches, HashFunc, line.ToUpper());
+                        if (line.Length > 1)
+                        {
+                            string capFirst = char.ToUpper(line[0]) + line.Substring(1);
+                            AddMatch(hashMatches, HashFunc, capFirst);
+                        }
+                    }
+                    if (run.tryExtensions)
+                    {
+                        //DEBUGNOW
+                        // have extra .s in  Hashing.FileExtensions
+                        var testExtensions = new List<string> {
+                           "evf",
+                           "ftexs",
+                           "lng",
+                        };
+                        foreach (var testExtension in testExtensions)
+                        {
+                            string extLine = $"{line}.{testExtension}";
+                            AddMatch(hashMatches, HashFunc, extLine);
+                        }
+
+                        foreach (var testExtension in Hashing.FileExtensions)
+                        {
+                            string extLine = $"{line}.{testExtension}";
+                            AddMatch(hashMatches, HashFunc, extLine);
+                        }
+                    }
+                }//));
+            }
+
+            return hashMatches;
+        }
+
+        /// <summary>
+        /// Adds to hashMatches
+        /// </summary>
+        private static void AddMatch(Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches, HashFunction HashFunc, string testString)
+        {
+            ConcurrentDictionary<string, bool> matches;
+            string hash = HashFunc(testString);
+            if (hashMatches.TryGetValue(hash, out matches))
+            {
+                matches[testString] = true;
+            } else
+            {
+                //no match for testString
+            }
+        }
+
+        /// <summary>
+        /// Outputs hashes for input strings for each HashFunc
+        /// </summary>
+        private static void BuildHashesForDict(List<string> inputStringsPaths)
+        {
+            //Parallel.ForEach(hashFuncs.Keys, funcName => {
+            foreach (string funcName in hashFuncs.Keys)
+            {
+                HashFunction HashFunc = hashFuncs[funcName];
+                foreach (var filePath in inputStringsPaths)
+                {
+                    Console.WriteLine(funcName + " hashing " + filePath);
+
+                    string outputPath = Path.GetDirectoryName(filePath) + "\\" + Path.GetFileNameWithoutExtension(filePath) + "_" + funcName + "HashStringList.txt";
+                    using (StreamWriter sw = new StreamWriter(outputPath))
+                    {
+                        foreach (string line in File.ReadLines(filePath))
+                        {
+                            sw.WriteLine(line + " " + HashFunc(line));
+                        }
+                    }
+
+                    Console.WriteLine("Finished " + funcName + " hashing " + filePath);
+                }
+            }
+            //});
+        }
+
+        private static string FixPathCodePath(string line)
+        {
+            if (line.Contains("/") || line.Contains("\\"))
+            {
+                if (line.Contains('.'))
+                {
+                    if (!FilePathHasInvalidChars(line))
+                    {
+                        line = line.Substring(0, line.IndexOf('.'));
+                    }
+                }
+            }
+            line = line.Replace('\\', '/');
+            return line;
         }
 
         private static List<string> GetFileList(string inputStringsPath)
@@ -470,7 +523,7 @@ namespace HashWrangler
             }
         }
 
-        private static List<string> GetInputHashes(string path)
+        private static List<string> GetInputHashes(string path, bool hashesToHex = false)
         {
             var inputHashes = new HashSet<string>();
 
@@ -481,21 +534,21 @@ namespace HashWrangler
             }
             if (Directory.Exists(path))
             {
-                files = Directory.GetFiles(path, "*.txt",SearchOption.AllDirectories);
+                files = Directory.GetFiles(path, "*.txt", SearchOption.AllDirectories);
             }
 
             if (files != null)
             {
                 foreach (string filePath in files)
                 {
-                    ReadInputHashes(filePath, ref inputHashes);
+                    ReadInputHashes(filePath, ref inputHashes, hashesToHex);
                 }
             }
 
             return inputHashes.ToList();
         }
 
-        private static void ReadInputHashes(string path, ref HashSet<string> inputHashes)
+        private static void ReadInputHashes(string path, ref HashSet<string> inputHashes, bool hashesToHex = false)
         {
             Console.WriteLine("ReadInputHashes " + path);
             if (!File.Exists(path))
@@ -518,8 +571,19 @@ namespace HashWrangler
 
             foreach (var line in lines)
             {
-                var str32 = line;
-                bool isNew = inputHashes.Add(str32);
+                if (line == "")
+                {
+                    Console.WriteLine("empty line in " + path);
+                    continue;
+                }
+                var hash = line;
+                if (hashesToHex)
+                {
+                    var uhash = ulong.Parse(hash);
+                    uhash = uhash & 0x3FFFFFFFFFFFF;
+                    hash = uhash.ToString("x");
+                }
+                bool isNew = inputHashes.Add(hash);
                 if (!isNew)
                 {
                     duplicates++;
@@ -532,7 +596,40 @@ namespace HashWrangler
             }
         }
 
+        public static bool FilePathHasInvalidChars(string path)
+        {
+            bool ret = false;
+            if (!string.IsNullOrEmpty(path))
+            {
+                if (path.Length >= 260)
+                {
+                    return true;
+                }
 
+                try
+                {
+                    // Careful!
+                    //    Path.GetDirectoryName("C:\Directory\SubDirectory")
+                    //    returns "C:\Directory", which may not be what you want in
+                    //    this case. You may need to explicitly add a trailing \
+                    //    if path is a directory and not a file path. As written, 
+                    //    this function just assumes path is a file path.
+                    string fileName = System.IO.Path.GetFileName(path);
+                    string fileDirectory = System.IO.Path.GetDirectoryName(path);
+
+                    // we don't need to do anything else,
+                    // if we got here without throwing an 
+                    // exception, then the path does not
+                    // contain invalid characters
+                } catch (ArgumentException)
+                {
+                    // Path functions will throw this 
+                    // if path contains invalid chars
+                    ret = true;
+                }
+            }
+            return ret;
+        }
 
     }
 }
