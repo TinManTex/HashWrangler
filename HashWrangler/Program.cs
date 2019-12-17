@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -17,13 +18,21 @@ namespace HashWrangler
     {
         class RunSettings
         {
-            public string inputHashesPath = null;
-            public string inputStringsPath = null;
+            public string inputHashesPath = "";
+            public string inputStringsPath = "";
             public string funcType = "StrCode32";
 
             public bool tryVariations = false;//WIP DEBUGNOW trouble is this fires off alot more collisions for StrCode32 depending on input
             public bool tryExtensions = false;
             public bool hashesToHex = false;
+
+            //tex for validating using mgsv-lookup-strings repo layout
+            public bool validateMode = false;
+            public string validateRoot = "";
+
+            public bool matchedStringsNameIsDictionary = false;//tex Should only be used when input strings are a folder, else it will overwrite the input strings file.
+            //By default matched strings will be written to <inputStringsPath>Strings_matchedStrings.txt (if input strings are a folder), 
+            //when set to true matched strings will be written to <inputStringsPath>.txt , which saves hasle of having to rename stuff if your workflow is for updating the mgsv-strings github repo
         }
 
         static void Main(string[] args)
@@ -31,106 +40,219 @@ namespace HashWrangler
             if (args.Length == 0)
             {
                 ShowUsageInfo();
+
+                RunSettings defaultConfig = new RunSettings();
+                JsonSerializerSettings serializeSettings = new JsonSerializerSettings();
+                serializeSettings.Formatting = Formatting.Indented;
+                string jsonStringOut = JsonConvert.SerializeObject(defaultConfig, serializeSettings);
+                string jsonOutPath = Directory.GetCurrentDirectory() + "/default-config.json";
+                jsonOutPath = Regex.Replace(jsonOutPath, @"\\", "/");
+                File.WriteAllText(jsonOutPath, jsonStringOut);
+                Console.WriteLine();
+                Console.WriteLine($"Writing default run config to {jsonOutPath}");
                 return;
             }
 
-            RunSettings run = new RunSettings();
+            RunSettings runSettings = new RunSettings();
 
-            run.inputHashesPath = args[0];
-            run.inputStringsPath = null;
-            if (args.Count() > 1)
+
+            string configPath = GetPath(args[0]);
+            if (configPath == null)
             {
-                run.inputStringsPath = args[1];
+                Console.WriteLine("ERROR: invalid path " + args[0]);
+                return;
             }
-
-            if (args.Count() > 3)
+            if (configPath.Contains(".json"))
             {
-                if (args[2].ToLower() == "-hashfunction" || args[2].ToLower() == "-h")
+                Console.WriteLine("Using run settings " + configPath);
+                string jsonString = File.ReadAllText(configPath);
+                runSettings = JsonConvert.DeserializeObject<RunSettings>(jsonString);
+            } else {
+                runSettings.inputHashesPath = args[0];
+                runSettings.inputStringsPath = "";
+
+
+                if (args.Count() > 1)
                 {
-                    run.funcType = args[3];
+                    runSettings.inputStringsPath = args[1];
+                }
+
+                if (args.Count() > 3)
+                {
+                    if (args[2].ToLower() == "-hashfunction" || args[2].ToLower() == "-h")
+                    {
+                        runSettings.funcType = args[3];
+                    }
                 }
             }
 
-
-            //tex hashwrangler <strings path>
-            if (run.inputStringsPath == null)
+            if (!runSettings.validateMode)
             {
-                run.inputStringsPath = run.inputHashesPath;
 
-                Console.WriteLine("Building hashes for strings:");
-                List<string> stringsFilesPaths = GetFileList(run.inputStringsPath);
-                if (stringsFilesPaths.Count == 0)
+                //tex hashwrangler <strings path> - BuildHashesForStrings
+                if (runSettings.inputStringsPath == "")
                 {
-                    Console.WriteLine($"Could not find any input strings in {run.inputStringsPath}");
+                    runSettings.inputStringsPath = runSettings.inputHashesPath;
+
+                    Console.WriteLine("Building hashes for strings:");
+                    List<string> stringsFilesPaths = GetFileList(runSettings.inputStringsPath);
+                    if (stringsFilesPaths.Count == 0)
+                    {
+                        Console.WriteLine($"ERROR: Could not find any input strings in {runSettings.inputStringsPath}");
+                        return;
+                    }
+                    BuildHashesForStrings(stringsFilesPaths);
                     return;
                 }
-                BuildHashesForDict(stringsFilesPaths);
+
+
+                if (!Directory.Exists(runSettings.inputHashesPath) && File.Exists(runSettings.inputHashesPath) == false)
+                {
+                    Console.WriteLine("ERROR: Could not find " + runSettings.inputHashesPath);
+                    return;
+                }
+
+                if (!Directory.Exists(runSettings.inputStringsPath) && File.Exists(runSettings.inputStringsPath) == false)
+                {
+                    Console.WriteLine("ERROR: Could not find " + runSettings.inputStringsPath);
+                    return;
+                }
+
+            } else {
+                if (!Directory.Exists(Path.GetDirectoryName(runSettings.validateRoot)))
+                {
+                    Console.WriteLine("ERROR: Could not find " + runSettings.validateRoot);
+                    return;
+                }
+            }
+
+            FixupPath(ref runSettings.inputHashesPath);
+            FixupPath(ref runSettings.inputStringsPath);
+            FixupPath(ref runSettings.validateRoot);
+
+            if (runSettings.validateMode)
+            {
+                string statsPath = Path.GetDirectoryName(runSettings.validateRoot) + "\\ValidateStats.txt";
+                if (File.Exists(statsPath))
+                {
+                    File.Delete(statsPath);
+                }
+
+
+                string jsonString = File.ReadAllText(runSettings.validateRoot);
+                var hashTypes = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonString);
+
+                string rootPath = Path.GetDirectoryName(runSettings.validateRoot);
+                string hashesPathRoot = rootPath + "\\" + "Hashes";
+                string directoriesPathRoot = rootPath + "\\" + "Dictionaries";
+
+                string[] hashesGamePaths = Directory.GetDirectories(hashesPathRoot);
+                foreach (string gamePath in hashesGamePaths)
+                {
+                    string gameId = new DirectoryInfo(gamePath).Name;
+
+                    foreach (var entry in hashTypes)
+                    {
+                        string hashName = entry.Key;
+                        string hashType = entry.Value;
+
+
+                        string hashNamePath = gamePath + "\\" + hashName;
+                        if (!Directory.Exists(hashNamePath))
+                        {
+                            Console.WriteLine("WARNING: Could not find path " + hashNamePath);
+                            continue;
+                        }
+
+                        string hashNamesDictionaryPath = $"{directoriesPathRoot}\\{gameId}\\{hashName}.txt";
+                        if (!File.Exists(hashNamesDictionaryPath))
+                        {
+                            Console.WriteLine("ERROR: Could not find dictionary " + hashNamesDictionaryPath);
+                            return;
+                        }
+
+
+                        runSettings.funcType = hashType;
+                        runSettings.inputHashesPath = hashNamePath;
+                        runSettings.inputStringsPath = hashNamesDictionaryPath;
+
+
+
+                        HashFunction HashFunc;
+                        try
+                        {
+                            HashFunc = hashFuncs[runSettings.funcType.ToLower()];
+                        } catch (KeyNotFoundException)
+                        {
+                            Console.WriteLine("ERROR: Could not find hash function " + runSettings.funcType);
+                            return;
+                        }
+
+                        Console.WriteLine("Reading input hashes:");
+                        List<string> inputHashesList = GetInputHashes(runSettings.inputHashesPath, runSettings.hashesToHex);
+                        if (inputHashesList == null)
+                        {
+                            Console.WriteLine($"ERROR: Could not find any input hashes in {runSettings.inputHashesPath}");
+                            return;
+                        }
+
+                        Console.WriteLine("Building strings file list");
+                        List<string> inputStringsFiles = GetFileList(runSettings.inputStringsPath);
+                        if (inputStringsFiles.Count == 0)
+                        {
+                            Console.WriteLine($"ERROR: Could not find any input strings in {runSettings.inputStringsPath}");
+                            return;
+                        }
+
+                        Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
+                        var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles);
+
+                        Console.WriteLine("Building output");
+                        BuildOutput(runSettings, hashMatches);
+                    }
+                }
+
                 return;
             }
 
-
-            if (!Directory.Exists(run.inputHashesPath) && File.Exists(run.inputHashesPath) == false)
             {
-                Console.WriteLine("Could not find " + run.inputHashesPath);
-                return;
+                HashFunction HashFunc;
+                try
+                {
+                    HashFunc = hashFuncs[runSettings.funcType.ToLower()];
+                } catch (KeyNotFoundException)
+                {
+                    Console.WriteLine("ERROR: Could not find hash function " + runSettings.funcType);
+                    return;
+                }
+
+                Console.WriteLine("Reading input hashes:");
+                List<string> inputHashesList = GetInputHashes(runSettings.inputHashesPath, runSettings.hashesToHex);
+                if (inputHashesList == null)
+                {
+                    Console.WriteLine($"ERROR: Could not find any input hashes in {runSettings.inputHashesPath}");
+                    return;
+                }
+
+                Console.WriteLine("Building strings file list");
+                List<string> inputStringsFiles = GetFileList(runSettings.inputStringsPath);
+                if (inputStringsFiles.Count == 0)
+                {
+                    Console.WriteLine($"ERROR: Could not find any input strings in {runSettings.inputStringsPath}");
+                    return;
+                }
+
+                Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
+                var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles);
+
+                Console.WriteLine("Building output");
+                BuildOutput(runSettings, hashMatches);
             }
-
-            if (!Directory.Exists(run.inputStringsPath) && File.Exists(run.inputStringsPath) == false)
-            {
-                Console.WriteLine("Could not find " + run.inputStringsPath);
-                return;
-            }
-
-            if (!Path.IsPathRooted(run.inputHashesPath))
-            {
-                run.inputHashesPath = Path.GetFullPath(run.inputHashesPath);
-            }
-            run.inputHashesPath = Regex.Replace(run.inputHashesPath, @"\\", "/");
-
-
-            if (!Path.IsPathRooted(run.inputStringsPath))
-            {
-                run.inputStringsPath = Path.GetFullPath(run.inputStringsPath);
-            }
-            run.inputStringsPath = Regex.Replace(run.inputStringsPath, @"\\", "/");
-
-            HashFunction HashFunc;
-            try
-            {
-                HashFunc = hashFuncs[run.funcType.ToLower()];
-            } catch (KeyNotFoundException)
-            {
-                HashFunc = StrCode32Str;
-                Console.WriteLine("ERROR: Could not find hash function " + run.funcType);
-                return;
-            }
-
-            Console.WriteLine("Reading input hashes:");
-            List<string> inputHashesList = GetInputHashes(run.inputHashesPath, run.hashesToHex);
-            if (inputHashesList == null)
-            {
-                Console.WriteLine($"Could not find any input hashes in {run.inputHashesPath}");
-                return;
-            }
-
-            Console.WriteLine("Building strings file list");
-            List<string> inputStringsFiles = GetFileList(run.inputStringsPath);
-            if (inputStringsFiles.Count == 0)
-            {
-                Console.WriteLine($"Could not find any input strings in {run.inputStringsPath}");
-                return;
-            }
-
-            Console.WriteLine($"Testing strings using HashFunction {run.funcType}:");
-            var hashMatches = TestStrings(run, HashFunc, inputHashesList, inputStringsFiles);
-
-            Console.WriteLine("Building output");
-            BuildOutput(run, hashMatches);
 
             Console.WriteLine("All done");
         }
 
-        private static void BuildOutput(RunSettings run, Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches)
+        private static void BuildOutput(RunSettings runSettings, Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches)
         {
             var matchedHashes = new List<string>();
             var unmatchedHashes = new List<string>();
@@ -162,7 +284,7 @@ namespace HashWrangler
                     continue;
                 }
 
-                //Collision
+                //Collision > 1 matches
                 collisionHashes.Add(hash);
                 StringBuilder line = new StringBuilder(hash.PadLeft(13));
                 line.Append(" ");
@@ -186,7 +308,7 @@ namespace HashWrangler
             hashStringMatches.Sort();
             hashStringCollisions.Sort();
 
-
+            Console.WriteLine(runSettings.inputStringsPath);
             Console.WriteLine("Stats:");
             int numInputHashes = hashMatches.Count;
 
@@ -216,11 +338,32 @@ namespace HashWrangler
             }
             */
 
-            Console.WriteLine("unmatchedHashes    [" + unmatchedHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + unmatchedHashesPercent + "%");
-            Console.WriteLine("matchedHashes      [" + matchedHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + matchedHashesPercent + "%");
-            Console.WriteLine("collsionHashes     [" + collisionHashes.Count.ToString().PadLeft(numHashPlaces) + "/" + numInputHashes + "] - " + collisionHashesPercent + "%");
-            //Console.WriteLine("unmatchedStrings   [" + unmatchedStringsNew.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + unmatchedStringsPercent + "%");
-            //Console.WriteLine("matchedStrings     [" + matchedStringsNew.Count.ToString().PadLeft(numStringPlaces) + "/" + numInputStrings + "] - " + matchedStringsPercent + "%");
+            string unmatchedStats = $"unmatchedHashes    [{unmatchedHashes.Count.ToString().PadLeft(numHashPlaces)}/{numInputHashes}] - {unmatchedHashesPercent}%";
+            string   matchedStats = $"matchedHashes      [{matchedHashes.Count.ToString().PadLeft(numHashPlaces)}/{numInputHashes}] - {matchedHashesPercent}%";
+            string collisionStats = $"collsionHashes     [{collisionHashes.Count.ToString().PadLeft(numHashPlaces)}/{numInputHashes}] - {collisionHashesPercent}%";
+
+
+            Console.WriteLine(unmatchedStats);
+            Console.WriteLine(matchedStats);
+            Console.WriteLine(collisionStats);
+            //Console.WriteLine($"unmatchedStrings   [{unmatchedStringsNew.Count.ToString().PadLeft(numStringPlaces)}/{numInputStrings}] - {unmatchedStringsPercent}%");
+            //Console.WriteLine($"matchedStrings     [{matchedStringsNew.Count.ToString().PadLeft(numStringPlaces)}/{numInputStrings}] - {matchedStringsPercent}%");
+
+            if (runSettings.validateMode)
+            {
+                string statsPath = Path.GetDirectoryName(runSettings.validateRoot) + "\\ValidateStats.txt";
+                using (StreamWriter sw = File.AppendText(statsPath))
+                {
+                    sw.WriteLine(runSettings.inputStringsPath);
+                    sw.WriteLine(unmatchedStats);
+                    sw.WriteLine(matchedStats);
+                    if (collisionHashes.Count > 0)
+                    {
+                        sw.WriteLine(collisionStats);
+                    }
+                    sw.WriteLine();
+                }
+            }
 
 
             Console.WriteLine("Writing out files");
@@ -231,21 +374,21 @@ namespace HashWrangler
             //for directory input:
             //<parent of input path>\<foldername><Hashes | Strings>_<somesuffix>.txt
             string hashesPath = "";
-            if (File.Exists(run.inputHashesPath))
+            if (File.Exists(runSettings.inputHashesPath))
             {
-                hashesPath = Path.GetDirectoryName(run.inputHashesPath) + "\\" + Path.GetFileNameWithoutExtension(run.inputHashesPath);
+                hashesPath = Path.GetDirectoryName(runSettings.inputHashesPath) + "\\" + Path.GetFileNameWithoutExtension(runSettings.inputHashesPath);
             } else
             {
-                string parent = Directory.GetParent(run.inputHashesPath).FullName;
-                hashesPath = Path.Combine(run.inputHashesPath, "..") + "\\" + new DirectoryInfo(run.inputHashesPath).Name + "Hashes";
+                string parent = Directory.GetParent(runSettings.inputHashesPath).FullName;
+                hashesPath = Path.Combine(runSettings.inputHashesPath, "..") + "\\" + new DirectoryInfo(runSettings.inputHashesPath).Name;// + "Hashes";
             }
             string stringsPath = "";
-            if (File.Exists(run.inputStringsPath))
+            if (File.Exists(runSettings.inputStringsPath))
             {
-                stringsPath = Path.GetDirectoryName(run.inputStringsPath) + "\\" + Path.GetFileNameWithoutExtension(run.inputStringsPath);
+                stringsPath = Path.GetDirectoryName(runSettings.inputStringsPath) + "\\" + Path.GetFileNameWithoutExtension(runSettings.inputStringsPath);
             } else
             {
-                stringsPath = Path.Combine(run.inputStringsPath, "..") + "\\" + new DirectoryInfo(run.inputStringsPath).Name + "Strings";
+                stringsPath = Path.Combine(runSettings.inputStringsPath, "..") + "\\" + new DirectoryInfo(runSettings.inputStringsPath).Name;// + "Strings";
             }
 
             hashesPath = Regex.Replace(hashesPath, @"\\", "/");
@@ -270,7 +413,13 @@ namespace HashWrangler
             File.WriteAllLines(hashesPath + "_matchedHashes.txt", matchedHashes);
 
             //File.WriteAllLines(stringsPath + "_unmatchedStrings.txt", unmatchedStringsList);
-            File.WriteAllLines(stringsPath + "_matchedStrings.txt", matchedStrings);
+            if (runSettings.matchedStringsNameIsDictionary)
+            {
+                File.WriteAllLines(stringsPath + ".txt", matchedStrings);
+            } else
+            {
+                File.WriteAllLines(stringsPath + "_matchedStrings.txt", matchedStrings);
+            }
             if (collisionStrings.Count > 0)
             {
                 File.WriteAllLines(stringsPath + "_collisionStrings.txt", collisionStrings);
@@ -284,10 +433,10 @@ namespace HashWrangler
         /// <returns>
         /// hashMatches
         /// </returns>
-        private static Dictionary<string, ConcurrentDictionary<string, bool>> TestStrings(RunSettings run, HashFunction HashFunc, List<string> inputHashesList, List<string> inputStringsFiles)
+        private static Dictionary<string, ConcurrentDictionary<string, bool>> TestStrings(RunSettings runSettings, HashFunction HashFunc, List<string> inputHashesList, List<string> inputStringsFiles)
         {
             bool isPathCode = false;
-            if (run.funcType.ToLower().Contains("pathcode"))//GOTCHA: not to be confused with pathfilenamecode which retains it's extension
+            if (runSettings.funcType.ToLower().Contains("pathcode"))//GOTCHA: not to be confused with pathfilenamecode which retains it's extension
             {
                 isPathCode = true;
             }
@@ -316,7 +465,7 @@ namespace HashWrangler
 
                     AddMatch(hashMatches, HashFunc, line);
 
-                    if (run.tryVariations)
+                    if (runSettings.tryVariations)
                     {
                         AddMatch(hashMatches, HashFunc, line.ToLower());
                         AddMatch(hashMatches, HashFunc, line.ToUpper());
@@ -326,7 +475,7 @@ namespace HashWrangler
                             AddMatch(hashMatches, HashFunc, capFirst);
                         }
                     }
-                    if (run.tryExtensions)
+                    if (runSettings.tryExtensions)
                     {
                         //DEBUGNOW
                         // have extra .s in  Hashing.FileExtensions
@@ -372,7 +521,7 @@ namespace HashWrangler
         /// <summary>
         /// Outputs hashes for input strings for each HashFunc
         /// </summary>
-        private static void BuildHashesForDict(List<string> inputStringsPaths)
+        private static void BuildHashesForStrings(List<string> inputStringsPaths)
         {
             //Parallel.ForEach(hashFuncs.Keys, funcName => {
             foreach (string funcName in hashFuncs.Keys)
@@ -631,5 +780,40 @@ namespace HashWrangler
             return ret;
         }
 
-    }
+        private static string GetPath(string path)
+        {
+            if (Directory.Exists(path) || File.Exists(path))
+            {
+                if (!Path.IsPathRooted(path))
+                {
+                    path = Path.GetFullPath(path);
+                }
+            } else
+            {
+                path = null;
+            }
+
+            return path;
+        }//GetPath
+
+        static void FixupPath(ref string path)
+        {
+            if (path == null)
+            {
+                return;
+            }
+
+            if (path == "")
+            {
+                return;
+            }
+
+            if (!Path.IsPathRooted(path))
+            {
+                path = Path.GetFullPath(path);
+            }
+            path = Regex.Replace(path, @"\\", "/");
+        }
+
+    }//Program
 }
