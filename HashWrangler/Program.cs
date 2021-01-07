@@ -40,6 +40,7 @@ namespace HashWrangler
             if (args.Length == 0)
             {
                 ShowUsageInfo();
+                Console.WriteLine();
 
                 RunSettings defaultConfig = new RunSettings();
                 JsonSerializerSettings serializeSettings = new JsonSerializerSettings();
@@ -48,13 +49,11 @@ namespace HashWrangler
                 string jsonOutPath = Directory.GetCurrentDirectory() + "/default-config.json";
                 jsonOutPath = Regex.Replace(jsonOutPath, @"\\", "/");
                 File.WriteAllText(jsonOutPath, jsonStringOut);
-                Console.WriteLine();
                 Console.WriteLine($"Writing default run config to {jsonOutPath}");
                 return;
             }
 
             RunSettings runSettings = new RunSettings();
-
 
             string configPath = GetPath(args[0]);
             if (configPath == null)
@@ -70,7 +69,6 @@ namespace HashWrangler
             } else {
                 runSettings.inputHashesPath = args[0];
                 runSettings.inputStringsPath = "";
-
 
                 if (args.Count() > 1)
                 {
@@ -88,7 +86,6 @@ namespace HashWrangler
 
             if (!runSettings.validateMode)
             {
-
                 //tex hashwrangler <strings path> - BuildHashesForStrings
                 if (runSettings.inputStringsPath == "")
                 {
@@ -105,7 +102,6 @@ namespace HashWrangler
                     return;
                 }
 
-
                 if (!Directory.Exists(runSettings.inputHashesPath) && File.Exists(runSettings.inputHashesPath) == false)
                 {
                     Console.WriteLine("ERROR: Could not find " + runSettings.inputHashesPath);
@@ -117,7 +113,6 @@ namespace HashWrangler
                     Console.WriteLine("ERROR: Could not find " + runSettings.inputStringsPath);
                     return;
                 }
-
             } else {
                 if (!Directory.Exists(Path.GetDirectoryName(runSettings.validateRoot)))
                 {
@@ -205,7 +200,12 @@ namespace HashWrangler
                         }
 
                         Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
+                        var testStringsStopWatch = new System.Diagnostics.Stopwatch();
+                        testStringsStopWatch.Start();
                         var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles);
+                        testStringsStopWatch.Stop();
+                        var timeSpan = testStringsStopWatch.Elapsed;
+                        Console.WriteLine($"TestStrings completed in {timeSpan.Hours}:{timeSpan.Minutes}:{timeSpan.Seconds}:{timeSpan.Milliseconds}");
 
                         Console.WriteLine("Building output");
                         BuildOutput(runSettings, hashMatches);
@@ -243,7 +243,12 @@ namespace HashWrangler
                 }
 
                 Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
+                var testStringsStopWatch = new System.Diagnostics.Stopwatch();
+                testStringsStopWatch.Start();
                 var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles);
+                testStringsStopWatch.Stop();
+                var timeSpan = testStringsStopWatch.Elapsed;
+                Console.WriteLine($"TestStrings completed in {timeSpan.Hours}:{timeSpan.Minutes}:{timeSpan.Seconds}:{timeSpan.Milliseconds}");
 
                 Console.WriteLine("Building output");
                 BuildOutput(runSettings, hashMatches);
@@ -453,7 +458,7 @@ namespace HashWrangler
             {
                 Console.WriteLine(filePath);
                 var lines = File.ReadLines(filePath);
-                //Parallel.ForEach(File.ReadLines(filePath), (Action<string>)(line => {
+                //Parallel.ForEach(lines, lineX => {
                 foreach (var lineX in lines)
                 {
                     var line = lineX;//DEBUGNOW
@@ -496,7 +501,8 @@ namespace HashWrangler
                             AddMatch(hashMatches, HashFunc, extLine);
                         }
                     }
-                }//));
+                }
+                //);
             }
 
             return hashMatches;
