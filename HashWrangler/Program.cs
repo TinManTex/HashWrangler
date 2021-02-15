@@ -33,7 +33,7 @@ namespace HashWrangler
             public bool matchedStringsNameIsDictionary = false;//tex Should only be used when input strings are a folder, else it will overwrite the input strings file.
             //By default matched strings will be written to <inputStringsPath>Strings_matchedStrings.txt (if input strings are a folder), 
             //when set to true matched strings will be written to <inputStringsPath>.txt , which saves hasle of having to rename stuff if your workflow is for updating the mgsv-strings github repo
-        }
+        }//RunSettings
 
         static void Main(string[] args)
         {
@@ -51,7 +51,7 @@ namespace HashWrangler
                 File.WriteAllText(jsonOutPath, jsonStringOut);
                 Console.WriteLine($"Writing default run config to {jsonOutPath}");
                 return;
-            }
+            }//if args==0
 
             RunSettings runSettings = new RunSettings();
 
@@ -82,7 +82,7 @@ namespace HashWrangler
                         runSettings.funcType = args[3];
                     }
                 }
-            }
+            }//read args
 
             if (!runSettings.validateMode)
             {
@@ -119,7 +119,7 @@ namespace HashWrangler
                     Console.WriteLine("ERROR: Could not find " + runSettings.validateRoot);
                     return;
                 }
-            }
+            }//validatemode?
 
             FixupPath(ref runSettings.inputHashesPath);
             FixupPath(ref runSettings.inputStringsPath);
@@ -209,13 +209,13 @@ namespace HashWrangler
 
                         Console.WriteLine("Building output");
                         BuildOutput(runSettings, hashMatches);
-                    }
-                }
+                    }// for hashtypes
+                }// for hashesGamePaths
 
                 return;
-            }
+            }//do validatemode
 
-            {
+            {//classic hash wrangle
                 HashFunction HashFunc;
                 try
                 {
@@ -252,10 +252,10 @@ namespace HashWrangler
 
                 Console.WriteLine("Building output");
                 BuildOutput(runSettings, hashMatches);
-            }
+            }//classic hash wrangle
 
             Console.WriteLine("All done");
-        }
+        }//Main
 
         private static void BuildOutput(RunSettings runSettings, Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches)
         {
@@ -429,7 +429,7 @@ namespace HashWrangler
             {
                 File.WriteAllLines(stringsPath + "_collisionStrings.txt", collisionStrings);
             }
-        }
+        }//BuildOutput
 
         /// <summary>
         /// Tests all strings in all files in inputStringsFiles using HashFunc
@@ -441,7 +441,10 @@ namespace HashWrangler
         private static Dictionary<string, ConcurrentDictionary<string, bool>> TestStrings(RunSettings runSettings, HashFunction HashFunc, List<string> inputHashesList, List<string> inputStringsFiles)
         {
             bool isPathCode = false;
-            if (runSettings.funcType.ToLower().Contains("pathcode"))//GOTCHA: not to be confused with pathfilenamecode which retains it's extension
+            string funcType = runSettings.funcType.ToLower();
+            //GOTCHA: not to be confused with pathfilenamecode which retains it's extension //the issue this is trying to workaround is pathcode hashing function is stripping . anway, so you'll get multiple matches
+            //however GZ is weird instead of hashing its extension it uses an extension id see TypeExtensions in GzsTool 0.2 Hashing.cs, or if no id is found (or rather id 0 extension=="") it just expects the entire string to be hashed, extension included
+            if (funcType.Contains("pathcode") && !funcType.Contains("gz"))
             {
                 isPathCode = true;
             }

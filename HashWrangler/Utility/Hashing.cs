@@ -430,7 +430,7 @@ namespace Utility
         /// </summary>
         public static string PathCode64GzStr(string text)
         {
-            ulong hash = StrCode(text);
+            ulong hash = StrCode(text, false);//GOTCHA: removeExtension, see GOTCHA in Program.TestStrings
             return hash.ToString("x");
         }
 
