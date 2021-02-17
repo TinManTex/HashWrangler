@@ -28,7 +28,7 @@ namespace HashWrangler
 
             //tex for validating using mgsv-lookup-strings repo layout
             public bool validateMode = false;
-            public string validateRoot = "";
+            public string validateRoot = "";//TODO: split into validateRoot, validateHashTypes (pointing to hash types .json)
 
             public bool matchedStringsNameIsDictionary = false;//tex Should only be used when input strings are a folder, else it will overwrite the input strings file.
             //By default matched strings will be written to <inputStringsPath>Strings_matchedStrings.txt (if input strings are a folder), 

@@ -21,6 +21,7 @@ namespace Utility
             {"pathcode64", PathCode64Str},//tex HashFileName as hex hashes (used by GzsTool as qar_dictionary)
             {"pathcode64gz", PathCode64GzStr},//tex equivalent to StrCode Hex.
             {"extensioncode64", ExtensionCode64Str },
+            {"md5hashtext", Md5HashTextStr },//tex fpk entry.md5hash for 'encrypted hashes'/ filepath
         };
 
         private static readonly MD5 Md5 = MD5.Create();
@@ -346,12 +347,14 @@ namespace Utility
         {
             return Md5.ComputeHash(buffer);
         }
+        */
 
         internal static byte[] Md5HashText(string text)
         {
             return Md5.ComputeHash(Encoding.Default.GetBytes(text));
         }
 
+        /* tex OFF
         public static void ReadMd5Dictionary(string path)
         {
             foreach (var line in File.ReadAllLines(path))
@@ -438,6 +441,14 @@ namespace Utility
         {
             ulong hash = HashFileExtension(text);
             return hash.ToString();
+        }
+
+        public static string Md5HashTextStr(string text) {
+            byte[] hash = Md5HashText(text);
+
+            string hashStr = BitConverter.ToString(hash);//tex converts to hex pairs seperated by -
+            hashStr = hashStr.Replace("-", "");//tex remove seperators
+            return hashStr;
         }
     }
 }
