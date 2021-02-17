@@ -16,6 +16,7 @@ PathFileNameCode32
 PathCode64
 PathCode64Gz
 ExtensionCode64
+Md5HashText
 Options are case insensitive
 
 Usage json config:
