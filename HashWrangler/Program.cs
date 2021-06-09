@@ -48,7 +48,7 @@ namespace HashWrangler
                 string jsonStringOut = JsonConvert.SerializeObject(defaultConfig, serializeSettings);
                 string jsonOutPath = Directory.GetCurrentDirectory() + "/default-config.json";
                 jsonOutPath = Regex.Replace(jsonOutPath, @"\\", "/");
-                File.WriteAllText(jsonOutPath, jsonStringOut);
+                File.WriteAllText(jsonOutPath, jsonStringOut, Encoding.UTF8);
                 Console.WriteLine($"Writing default run config to {jsonOutPath}");
                 return;
             }//if args==0
@@ -64,7 +64,7 @@ namespace HashWrangler
             if (configPath.Contains(".json"))
             {
                 Console.WriteLine("Using run settings " + configPath);
-                string jsonString = File.ReadAllText(configPath);
+                string jsonString = File.ReadAllText(configPath, Encoding.UTF8);
                 runSettings = JsonConvert.DeserializeObject<RunSettings>(jsonString);
             } else {
                 runSettings.inputHashesPath = args[0];
@@ -98,7 +98,11 @@ namespace HashWrangler
                         Console.WriteLine($"ERROR: Could not find any input strings in {runSettings.inputStringsPath}");
                         return;
                     }
-                    BuildHashesForStrings(stringsFilesPaths);
+
+                    foreach (string funcName in hashFuncs.Keys)
+                    {
+                        BuildHashesForStrings(stringsFilesPaths, funcName);
+                    }
                     return;
                 }
 
@@ -134,7 +138,7 @@ namespace HashWrangler
                 }
 
 
-                string jsonString = File.ReadAllText(runSettings.validateRoot);
+                string jsonString = File.ReadAllText(runSettings.validateRoot, Encoding.UTF8);
                 var hashTypes = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonString);
 
                 string rootPath = Path.GetDirectoryName(runSettings.validateRoot);
@@ -200,15 +204,17 @@ namespace HashWrangler
                         }
 
                         Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
+                        var unmatchedStrings = new ConcurrentQueue<string>();
+
                         var testStringsStopWatch = new System.Diagnostics.Stopwatch();
                         testStringsStopWatch.Start();
-                        var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles);
+                        var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles, unmatchedStrings);
                         testStringsStopWatch.Stop();
                         var timeSpan = testStringsStopWatch.Elapsed;
                         Console.WriteLine($"TestStrings completed in {timeSpan.Hours}:{timeSpan.Minutes}:{timeSpan.Seconds}:{timeSpan.Milliseconds}");
 
                         Console.WriteLine("Building output");
-                        BuildOutput(runSettings, hashMatches);
+                        BuildOutput(runSettings, hashMatches, unmatchedStrings);
                     }// for hashtypes
                 }// for hashesGamePaths
 
@@ -243,31 +249,34 @@ namespace HashWrangler
                 }
 
                 Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
+                var unmatchedStrings = new ConcurrentQueue<string>();
                 var testStringsStopWatch = new System.Diagnostics.Stopwatch();
                 testStringsStopWatch.Start();
-                var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles);
+                var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles, unmatchedStrings);
                 testStringsStopWatch.Stop();
                 var timeSpan = testStringsStopWatch.Elapsed;
                 Console.WriteLine($"TestStrings completed in {timeSpan.Hours}:{timeSpan.Minutes}:{timeSpan.Seconds}:{timeSpan.Milliseconds}");
 
                 Console.WriteLine("Building output");
-                BuildOutput(runSettings, hashMatches);
+                BuildOutput(runSettings, hashMatches, unmatchedStrings);
             }//classic hash wrangle
 
             Console.WriteLine("All done");
         }//Main
 
-        private static void BuildOutput(RunSettings runSettings, Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches)
+        private static void BuildOutput(RunSettings runSettings, Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches, ConcurrentQueue<string> unmatchedStringsQueue)
         {
             var matchedHashes = new List<string>();
             var unmatchedHashes = new List<string>();
             var collisionHashes = new List<string>();
 
             var matchedStrings = new List<string>();
+            var unmatchedStrings = unmatchedStringsQueue.ToList<string>();
             var collisionStrings = new List<string>();
 
             var hashStringMatches = new List<string>();
             var hashStringCollisions = new List<string>();
+
 
             foreach (var item in hashMatches)
             {
@@ -308,10 +317,13 @@ namespace HashWrangler
             collisionHashes.Sort();
 
             matchedStrings.Sort();
+            unmatchedStrings.Sort();
             collisionStrings.Sort();
 
             hashStringMatches.Sort();
             hashStringCollisions.Sort();
+
+
 
             Console.WriteLine(runSettings.inputStringsPath);
             Console.WriteLine("Stats:");
@@ -353,6 +365,7 @@ namespace HashWrangler
             Console.WriteLine(collisionStats);
             //Console.WriteLine($"unmatchedStrings   [{unmatchedStringsNew.Count.ToString().PadLeft(numStringPlaces)}/{numInputStrings}] - {unmatchedStringsPercent}%");
             //Console.WriteLine($"matchedStrings     [{matchedStringsNew.Count.ToString().PadLeft(numStringPlaces)}/{numInputStrings}] - {matchedStringsPercent}%");
+            Console.WriteLine($"unmatchedStrings   [{unmatchedStrings.Count.ToString().PadLeft(numStringPlaces)}]");
 
             if (runSettings.validateMode)
             {
@@ -368,7 +381,7 @@ namespace HashWrangler
                     }
                     sw.WriteLine();
                 }
-            }
+            }//if validateMode
 
 
             Console.WriteLine("Writing out files");
@@ -417,7 +430,10 @@ namespace HashWrangler
             File.WriteAllLines(hashesPath + "_unmatchedHashes.txt", unmatchedHashes);
             File.WriteAllLines(hashesPath + "_matchedHashes.txt", matchedHashes);
 
-            //File.WriteAllLines(stringsPath + "_unmatchedStrings.txt", unmatchedStringsList);
+            if (unmatchedStrings.Count != 0)
+            {
+                File.WriteAllLines(stringsPath + "_unmatchedStrings.txt", unmatchedStrings);
+            }
             if (runSettings.matchedStringsNameIsDictionary)
             {
                 File.WriteAllLines(stringsPath + ".txt", matchedStrings);
@@ -438,7 +454,7 @@ namespace HashWrangler
         /// <returns>
         /// hashMatches
         /// </returns>
-        private static Dictionary<string, ConcurrentDictionary<string, bool>> TestStrings(RunSettings runSettings, HashFunction HashFunc, List<string> inputHashesList, List<string> inputStringsFiles)
+        private static Dictionary<string, ConcurrentDictionary<string, bool>> TestStrings(RunSettings runSettings, HashFunction HashFunc, List<string> inputHashesList, List<string> inputStringsFiles, ConcurrentQueue<string> unmatchedStrings)
         {
             bool isPathCode = false;
             string funcType = runSettings.funcType.ToLower();
@@ -460,7 +476,7 @@ namespace HashWrangler
             foreach (var filePath in inputStringsFiles)
             {
                 Console.WriteLine(filePath);
-                var lines = File.ReadLines(filePath);
+                var lines = File.ReadLines(filePath);//DEBUGNOW encoding?
                 //Parallel.ForEach(lines, lineX => {
                 foreach (var lineX in lines)
                 {
@@ -471,16 +487,16 @@ namespace HashWrangler
                         line = FixPathCodePath(line);
                     }
 
-                    AddMatch(hashMatches, HashFunc, line);
+                    AddMatch(hashMatches, HashFunc, line, unmatchedStrings);
 
                     if (runSettings.tryVariations)
                     {
-                        AddMatch(hashMatches, HashFunc, line.ToLower());
-                        AddMatch(hashMatches, HashFunc, line.ToUpper());
+                        AddMatch(hashMatches, HashFunc, line.ToLower(), unmatchedStrings);
+                        AddMatch(hashMatches, HashFunc, line.ToUpper(), unmatchedStrings);
                         if (line.Length > 1)
                         {
                             string capFirst = char.ToUpper(line[0]) + line.Substring(1);
-                            AddMatch(hashMatches, HashFunc, capFirst);
+                            AddMatch(hashMatches, HashFunc, capFirst, unmatchedStrings);
                         }
                     }
                     if (runSettings.tryExtensions)
@@ -495,13 +511,13 @@ namespace HashWrangler
                         foreach (var testExtension in testExtensions)
                         {
                             string extLine = $"{line}.{testExtension}";
-                            AddMatch(hashMatches, HashFunc, extLine);
+                            AddMatch(hashMatches, HashFunc, extLine, unmatchedStrings);
                         }
 
                         foreach (var testExtension in Hashing.FileExtensions)
                         {
                             string extLine = $"{line}.{testExtension}";
-                            AddMatch(hashMatches, HashFunc, extLine);
+                            AddMatch(hashMatches, HashFunc, extLine, unmatchedStrings);
                         }
                     }
                 }
@@ -514,7 +530,7 @@ namespace HashWrangler
         /// <summary>
         /// Adds to hashMatches
         /// </summary>
-        private static void AddMatch(Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches, HashFunction HashFunc, string testString)
+        private static void AddMatch(Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches, HashFunction HashFunc, string testString, ConcurrentQueue<string> unmatchedStrings)
         {
             ConcurrentDictionary<string, bool> matches;
             string hash = HashFunc(testString);
@@ -524,35 +540,32 @@ namespace HashWrangler
             } else
             {
                 //no match for testString
+                unmatchedStrings.Enqueue(testString);
             }
-        }
+        }//AddMatch
 
         /// <summary>
         /// Outputs hashes for input strings for each HashFunc
         /// </summary>
-        private static void BuildHashesForStrings(List<string> inputStringsPaths)
+        private static void BuildHashesForStrings(List<string> inputStringsPaths, string funcName)
         {
-            //Parallel.ForEach(hashFuncs.Keys, funcName => {
-            foreach (string funcName in hashFuncs.Keys)
-            {
+
                 HashFunction HashFunc = hashFuncs[funcName];
                 foreach (var filePath in inputStringsPaths)
                 {
                     Console.WriteLine(funcName + " hashing " + filePath);
 
                     string outputPath = Path.GetDirectoryName(filePath) + "\\" + Path.GetFileNameWithoutExtension(filePath) + "_" + funcName + "HashStringList.txt";
-                    using (StreamWriter sw = new StreamWriter(outputPath))
+                    using (StreamWriter sw = new StreamWriter(outputPath, false, Encoding.UTF8))
                     {
-                        foreach (string line in File.ReadLines(filePath))
+                        foreach (string line in File.ReadLines(filePath))//DEBUGNOW encoding?
                         {
-                            sw.WriteLine(line + " " + HashFunc(line));
+                            sw.WriteLine(line + "," + HashFunc(line));
                         }
                     }
 
                     Console.WriteLine("Finished " + funcName + " hashing " + filePath);
                 }
-            }
-            //});
         }
 
         private static string FixPathCodePath(string line)
@@ -644,7 +657,7 @@ namespace HashWrangler
             string[] lines;
             try
             {
-                lines = File.ReadAllLines(path);
+                lines = File.ReadAllLines(path);//DEBUGNOW encoding?
             } catch (Exception e)
             {
                 Console.WriteLine("Unable to read the dictionary " + path + " " + e.Message);
@@ -720,7 +733,7 @@ namespace HashWrangler
             string[] lines;
             try
             {
-                lines = File.ReadAllLines(path);
+                lines = File.ReadAllLines(path);//DEBUGNOW encoding?
             } catch (Exception e)
             {
                 Console.WriteLine("Unable to read inputHashes " + path + " " + e);
