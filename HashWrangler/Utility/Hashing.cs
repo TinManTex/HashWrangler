@@ -16,8 +16,12 @@ namespace Utility
         public static Dictionary<string, HashFunction> hashFuncs = new Dictionary<string, HashFunction> {
             {"strcode32", StrCode32Str},
             {"strcode64", StrCode64Str},
+            {"strcode32hex", StrCode32HexStr},
+            {"strcode64hex", StrCode64HexStr},
             {"pathfilenamecode32", PathFileNameCode32Str},
-            {"pathfilenamecode64", PathFileNameCode64Str},//tex for want of a better name, to match PathFileNameCode32 which named from lua function
+            {"pathfilenamecode64", PathFileNameCode64Str},//tex for want of a better name, to match PathFileNameCode32 which named from lua function (and outputs decimal to match), QuickHash calls it PathCode32/64 with Extension (as hex)
+            {"pathfilenamecode32hex", PathFileNameCode32HexStr},//tex KLUDGE, should specify or detect whether hash representation is hex or decimal
+            {"pathfilenamecode64hex", PathFileNameCode64HexStr},
             {"pathcode64", PathCode64Str},//tex HashFileName as hex hashes (used by GzsTool as qar_dictionary)
             {"pathcode64gz", PathCode64GzStr},//tex equivalent to StrCode Hex.
             {"extensioncode64", ExtensionCode64Str },
@@ -398,10 +402,20 @@ namespace Utility
             var hash = (uint)StrCode(text);
             return hash.ToString();
         }
+        public static string StrCode32HexStr(string text)
+        {
+            var hash = (uint)StrCode(text);
+            return hash.ToString("x");
+        }
         public static string StrCode64Str(string text)
         {
             var hash = StrCode(text);
             return hash.ToString();
+        }
+        public static string StrCode64HexStr(string text)
+        {
+            var hash = StrCode(text);
+            return hash.ToString("x");
         }
 
         //TODO: verify output matches lua PathFileNameCode32 (it was missing in some cases? see mockfox pathfilename note?)
@@ -410,6 +424,11 @@ namespace Utility
             var hash = (uint)HashFileNameWithExtension(text);
             return hash.ToString();
         }
+        public static string PathFileNameCode32HexStr(string text)
+        {
+            var hash = (uint)HashFileNameWithExtension(text);
+            return hash.ToString("x");
+        }
         /// <summary>
         /// for want of a better name, to match PathFileNameCode32 which named from lua function
         /// </summary>
@@ -417,6 +436,11 @@ namespace Utility
         {
             ulong hash = Hashing.HashFileNameWithExtension(text);
             return hash.ToString();
+        }
+        public static string PathFileNameCode64HexStr(string text)
+        {
+            ulong hash = Hashing.HashFileNameWithExtension(text);
+            return hash.ToString("x");
         }
         //tex DEBUGNOW TODO name, this is more specific to gzstool dictionary implementation than a general Fox implementation?
         /// <summary>
@@ -450,5 +474,5 @@ namespace Utility
             hashStr = hashStr.Replace("-", "");//tex remove seperators
             return hashStr;
         }
-    }
-}
+    }//Hashing
+}//namespace Utility
