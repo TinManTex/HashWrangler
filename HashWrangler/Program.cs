@@ -835,7 +835,22 @@ namespace HashWrangler
                 path = Path.GetFullPath(path);
             }
             path = Regex.Replace(path, @"\\", "/");
-        }
+        }//FixupPath
 
+        public static bool IsHex(String s)
+        {
+            for (int i = 0; i < s.Length; i++)
+            {
+                char ch = s[i];
+                // Check if the character is invalid
+                if ((ch < '0' || ch > '9') &&
+                    (ch < 'A' || ch > 'F') &&
+                    (ch < 'a' || ch > 'f'))
+                {
+                    return false;
+                }
+            }// for char in string
+            return true;
+        }//IsHex
     }//Program
 }
