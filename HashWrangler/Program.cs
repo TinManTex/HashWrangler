@@ -131,138 +131,145 @@ namespace HashWrangler
 
             if (runSettings.validateMode)
             {
-                string statsPath = Path.GetDirectoryName(runSettings.validateRoot) + "\\ValidateStats.txt";
-                if (File.Exists(statsPath))
-                {
-                    File.Delete(statsPath);
-                }
-
-
-                string jsonString = File.ReadAllText(runSettings.validateRoot, Encoding.UTF8);
-                var hashTypes = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonString);
-
-                string rootPath = Path.GetDirectoryName(runSettings.validateRoot);
-                string hashesPathRoot = rootPath + "\\" + "Hashes";
-                string directoriesPathRoot = rootPath + "\\" + "Dictionaries";
-
-                string[] hashesGamePaths = Directory.GetDirectories(hashesPathRoot);
-                foreach (string gamePath in hashesGamePaths)
-                {
-                    string gameId = new DirectoryInfo(gamePath).Name;
-
-                    foreach (var entry in hashTypes)
-                    {
-                        string hashName = entry.Key;
-                        string hashType = entry.Value;
-
-
-                        string hashNamePath = gamePath + "\\" + hashName;
-                        if (!Directory.Exists(hashNamePath))
-                        {
-                            Console.WriteLine("WARNING: Could not find path " + hashNamePath);
-                            continue;
-                        }
-
-                        string hashNamesDictionaryPath = $"{directoriesPathRoot}\\{gameId}\\{hashName}.txt";
-                        if (!File.Exists(hashNamesDictionaryPath))
-                        {
-                            Console.WriteLine("ERROR: Could not find dictionary " + hashNamesDictionaryPath);
-                            return;
-                        }
-
-
-                        runSettings.funcType = hashType;
-                        runSettings.inputHashesPath = hashNamePath;
-                        runSettings.inputStringsPath = hashNamesDictionaryPath;
-
-
-
-                        HashFunction HashFunc;
-                        try
-                        {
-                            HashFunc = hashFuncs[runSettings.funcType.ToLower()];
-                        } catch (KeyNotFoundException)
-                        {
-                            Console.WriteLine("ERROR: Could not find hash function " + runSettings.funcType);
-                            return;
-                        }
-
-                        Console.WriteLine("Reading input hashes:");
-                        List<string> inputHashesList = GetInputHashes(runSettings.inputHashesPath, runSettings.hashesToHex);
-                        if (inputHashesList == null)
-                        {
-                            Console.WriteLine($"ERROR: Could not find any input hashes in {runSettings.inputHashesPath}");
-                            return;
-                        }
-
-                        Console.WriteLine("Building strings file list");
-                        List<string> inputStringsFiles = GetFileList(runSettings.inputStringsPath);
-                        if (inputStringsFiles.Count == 0)
-                        {
-                            Console.WriteLine($"ERROR: Could not find any input strings in {runSettings.inputStringsPath}");
-                            return;
-                        }
-
-                        Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
-                        var unmatchedStrings = new ConcurrentQueue<string>();
-
-                        var testStringsStopWatch = new System.Diagnostics.Stopwatch();
-                        testStringsStopWatch.Start();
-                        var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles, unmatchedStrings);
-                        testStringsStopWatch.Stop();
-                        var timeSpan = testStringsStopWatch.Elapsed;
-                        Console.WriteLine($"TestStrings completed in {timeSpan.Hours}:{timeSpan.Minutes}:{timeSpan.Seconds}:{timeSpan.Milliseconds}");
-
-                        Console.WriteLine("Building output");
-                        BuildOutput(runSettings, hashMatches, unmatchedStrings);
-                    }// for hashtypes
-                }// for hashesGamePaths
-
-                return;
-            }//do validatemode
-
-            {//classic hash wrangle
-                HashFunction HashFunc;
-                try
-                {
-                    HashFunc = hashFuncs[runSettings.funcType.ToLower()];
-                } catch (KeyNotFoundException)
-                {
-                    Console.WriteLine("ERROR: Could not find hash function " + runSettings.funcType);
-                    return;
-                }
-
-                Console.WriteLine("Reading input hashes:");
-                List<string> inputHashesList = GetInputHashes(runSettings.inputHashesPath, runSettings.hashesToHex);
-                if (inputHashesList == null)
-                {
-                    Console.WriteLine($"ERROR: Could not find any input hashes in {runSettings.inputHashesPath}");
-                    return;
-                }
-
-                Console.WriteLine("Building strings file list");
-                List<string> inputStringsFiles = GetFileList(runSettings.inputStringsPath);
-                if (inputStringsFiles.Count == 0)
-                {
-                    Console.WriteLine($"ERROR: Could not find any input strings in {runSettings.inputStringsPath}");
-                    return;
-                }
-
-                Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
-                var unmatchedStrings = new ConcurrentQueue<string>();
-                var testStringsStopWatch = new System.Diagnostics.Stopwatch();
-                testStringsStopWatch.Start();
-                var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles, unmatchedStrings);
-                testStringsStopWatch.Stop();
-                var timeSpan = testStringsStopWatch.Elapsed;
-                Console.WriteLine($"TestStrings completed in {timeSpan.Hours}:{timeSpan.Minutes}:{timeSpan.Seconds}:{timeSpan.Milliseconds}");
-
-                Console.WriteLine("Building output");
-                BuildOutput(runSettings, hashMatches, unmatchedStrings);
-            }//classic hash wrangle
+                ValidateMode(runSettings);
+            } else {
+                HashWrangle(runSettings);
+            }
 
             Console.WriteLine("All done");
         }//Main
+
+        private static void HashWrangle(RunSettings runSettings)
+        {
+            HashFunction HashFunc;
+            try
+            {
+                HashFunc = hashFuncs[runSettings.funcType.ToLower()];
+            }
+            catch (KeyNotFoundException)
+            {
+                Console.WriteLine("ERROR: Could not find hash function " + runSettings.funcType);
+                return;
+            }
+
+            Console.WriteLine("Reading input hashes:");
+            List<string> inputHashesList = GetInputHashes(runSettings.inputHashesPath, runSettings.hashesToHex);
+            if (inputHashesList == null)
+            {
+                Console.WriteLine($"ERROR: Could not find any input hashes in {runSettings.inputHashesPath}");
+                return;
+            }
+
+            Console.WriteLine("Building strings file list");
+            List<string> inputStringsFiles = GetFileList(runSettings.inputStringsPath);
+            if (inputStringsFiles.Count == 0)
+            {
+                Console.WriteLine($"ERROR: Could not find any input strings in {runSettings.inputStringsPath}");
+                return;
+            }
+
+            Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
+            var unmatchedStrings = new ConcurrentQueue<string>();
+            var testStringsStopWatch = new System.Diagnostics.Stopwatch();
+            testStringsStopWatch.Start();
+            var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles, unmatchedStrings);
+            testStringsStopWatch.Stop();
+            var timeSpan = testStringsStopWatch.Elapsed;
+            Console.WriteLine($"TestStrings completed in {timeSpan.Hours}:{timeSpan.Minutes}:{timeSpan.Seconds}:{timeSpan.Milliseconds}");
+
+            Console.WriteLine("Building output");
+            BuildOutput(runSettings, hashMatches, unmatchedStrings);
+        }//HashWrangle
+
+        private static void ValidateMode(RunSettings runSettings)
+        {
+            string statsPath = Path.GetDirectoryName(runSettings.validateRoot) + "\\ValidateStats.txt";
+            if (File.Exists(statsPath))
+            {
+                File.Delete(statsPath);
+            }
+
+
+            string jsonString = File.ReadAllText(runSettings.validateRoot, Encoding.UTF8);
+            var hashTypes = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonString);
+
+            string rootPath = Path.GetDirectoryName(runSettings.validateRoot);
+            string hashesPathRoot = rootPath + "\\" + "Hashes";
+            string directoriesPathRoot = rootPath + "\\" + "Dictionaries";
+
+            string[] hashesGamePaths = Directory.GetDirectories(hashesPathRoot);
+            foreach (string gamePath in hashesGamePaths)
+            {
+                string gameId = new DirectoryInfo(gamePath).Name;
+
+                foreach (var entry in hashTypes)
+                {
+                    string hashName = entry.Key;
+                    string hashType = entry.Value;
+
+
+                    string hashNamePath = gamePath + "\\" + hashName;
+                    if (!Directory.Exists(hashNamePath))
+                    {
+                        Console.WriteLine("WARNING: Could not find path " + hashNamePath);
+                        continue;
+                    }
+
+                    string hashNamesDictionaryPath = $"{directoriesPathRoot}\\{gameId}\\{hashName}.txt";
+                    if (!File.Exists(hashNamesDictionaryPath))
+                    {
+                        Console.WriteLine("ERROR: Could not find dictionary " + hashNamesDictionaryPath);
+                        return;
+                    }
+
+
+                    runSettings.funcType = hashType;
+                    runSettings.inputHashesPath = hashNamePath;
+                    runSettings.inputStringsPath = hashNamesDictionaryPath;
+
+
+
+                    HashFunction HashFunc;
+                    try
+                    {
+                        HashFunc = hashFuncs[runSettings.funcType.ToLower()];
+                    } catch (KeyNotFoundException)
+                    {
+                        Console.WriteLine("ERROR: Could not find hash function " + runSettings.funcType);
+                        return;
+                    }
+
+                    Console.WriteLine("Reading input hashes:");
+                    List<string> inputHashesList = GetInputHashes(runSettings.inputHashesPath, runSettings.hashesToHex);
+                    if (inputHashesList == null)
+                    {
+                        Console.WriteLine($"ERROR: Could not find any input hashes in {runSettings.inputHashesPath}");
+                        return;
+                    }
+
+                    Console.WriteLine("Building strings file list");
+                    List<string> inputStringsFiles = GetFileList(runSettings.inputStringsPath);
+                    if (inputStringsFiles.Count == 0)
+                    {
+                        Console.WriteLine($"ERROR: Could not find any input strings in {runSettings.inputStringsPath}");
+                        return;
+                    }
+
+                    Console.WriteLine($"Testing strings using HashFunction {runSettings.funcType}:");
+                    var unmatchedStrings = new ConcurrentQueue<string>();
+
+                    var testStringsStopWatch = new System.Diagnostics.Stopwatch();
+                    testStringsStopWatch.Start();
+                    var hashMatches = TestStrings(runSettings, HashFunc, inputHashesList, inputStringsFiles, unmatchedStrings);
+                    testStringsStopWatch.Stop();
+                    var timeSpan = testStringsStopWatch.Elapsed;
+                    Console.WriteLine($"TestStrings completed in {timeSpan.Hours}:{timeSpan.Minutes}:{timeSpan.Seconds}:{timeSpan.Milliseconds}");
+
+                    Console.WriteLine("Building output");
+                    BuildOutput(runSettings, hashMatches, unmatchedStrings);
+                }// for hashtypes
+            }// for hashesGamePaths
+        }//ValidateMode
 
         private static void BuildOutput(RunSettings runSettings, Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches, ConcurrentQueue<string> unmatchedStringsQueue)
         {
