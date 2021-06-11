@@ -26,6 +26,8 @@ namespace Utility
             {"pathcode64gz", PathCode64GzStr},//tex equivalent to StrCode Hex.
             {"extensioncode64", ExtensionCode64Str },
             {"md5hashtext", Md5HashTextStr },//tex fpk entry.md5hash for 'encrypted hashes'/ filepath
+            {"unknown32", Unknown32Str },//tex for unknown hash types, just to put it in a category so tools can chew through stuff without having to exclude, should always match false
+            {"unknown64", Unknown64Str },//tex 
         };
 
         private static readonly MD5 Md5 = MD5.Create();
@@ -473,6 +475,16 @@ namespace Utility
             string hashStr = BitConverter.ToString(hash);//tex converts to hex pairs seperated by -
             hashStr = hashStr.Replace("-", "");//tex remove seperators
             return hashStr;
+        }
+
+        public static string Unknown32Str(string text)
+        {
+            return "";
+        }
+
+        public static string Unknown64Str(string text)
+        {
+            return "";
         }
     }//Hashing
 }//namespace Utility
