@@ -28,11 +28,14 @@ namespace HashWrangler
 
             //tex for validating using mgsv-lookup-strings repo layout
             public bool validateMode = false;
-            public string validateRoot = "";//TODO: split into validateRoot, validateHashTypes (pointing to hash types .json)
+            public string validateRoot = "";//tex points to a fileType folder in repo. TODO: (actually it currently points to the hash_types.json) split into validateRoot, validateHashTypes (pointing to hash types .json)
 
             public bool matchedStringsNameIsDictionary = false;//tex Should only be used when input strings are a folder, else it will overwrite the input strings file.
             //By default matched strings will be written to <inputStringsPath>Strings_matchedStrings.txt (if input strings are a folder), 
             //when set to true matched strings will be written to <inputStringsPath>.txt , which saves hasle of having to rename stuff if your workflow is for updating the mgsv-strings github repo
+
+            public bool buildToolDictionaries = false;//tex combine the mgsv-lookup-strings repo Dictionaries\{gameId}\{hashName} dictionaries to too dictionary name {fileType}_{hashName}_dictionary.txt
+            //should be used in conjunction with validateMode
         }//RunSettings
 
         static void Main(string[] args)
@@ -132,6 +135,11 @@ namespace HashWrangler
             if (runSettings.validateMode)
             {
                 ValidateMode(runSettings);
+                //tex suppose I'll gate it in validate mode
+                if (runSettings.buildToolDictionaries)
+                {
+                    BuildToolDictionaries(runSettings);
+                }
             } else {
                 HashWrangle(runSettings);
             }
@@ -270,6 +278,56 @@ namespace HashWrangler
                 }// for hashtypes
             }// for hashesGamePaths
         }//ValidateMode
+
+        //ASSUMPTION: mgsv-lookup-strings repo layout of dictionaries at {fileType}\Dictionaries\{gameId}...\{hashName}.txt
+        //only want to run this after validate has updated the dictionaries
+        //TODO: review the current state of tools dictionary names/usage (some combine multiple hashName dicts)
+        private static void BuildToolDictionaries(RunSettings runSettings)
+        {
+            //REF validateRoot=D:\GitHub\mgsv-lookup-strings\lba\lba_hash_types.json
+            string rootPath = Path.GetDirectoryName(runSettings.validateRoot);
+            string fileType = new DirectoryInfo(rootPath).Name;
+            string dictionariesPath = rootPath + "\\" + "Dictionaries";
+
+            string jsonString = File.ReadAllText(runSettings.validateRoot, Encoding.UTF8);
+            var hashTypes = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonString);
+
+            Dictionary<string, HashSet<string>> dictionaries = new Dictionary<string, HashSet<string>>();//k=hashType,v=combined dictionary
+
+            foreach (var entry in hashTypes)
+            {
+                string hashName = entry.Key;
+                dictionaries.Add(hashName, new HashSet<string>());
+            }//foreach hashTypes
+
+            string[] dictionariesGamePaths = Directory.GetDirectories(dictionariesPath);
+            foreach (string gameIdPath in dictionariesGamePaths)
+            {
+                //REF gameIdPath=D:\GitHub\mgsv-lookup-strings\lba\Dictionaries\TPP
+                string gameId = new DirectoryInfo(gameIdPath).Name;
+                foreach (var entry in hashTypes)
+                {
+                    string hashName = entry.Key;
+                    string dictPath = Path.Combine(gameIdPath, $"{hashName}.txt");
+                    var lines = File.ReadLines(dictPath);
+                    foreach (var line in lines)
+                    {
+                        dictionaries[hashName].Add(line);
+                    }//foreach line
+                }//foreach hashTypes
+            }//for dictionariesGamePaths
+
+            foreach(var entry in dictionaries)
+            {
+                string hashName = entry.Key;
+                var dictionary = entry.Value.ToList();
+                dictionary.Sort();
+
+                string fileName = $"{fileType}_{hashName}_dictionary.txt".ToLower();
+                string dictionaryPath = Path.Combine(dictionariesPath, fileName);
+                File.WriteAllLines(dictionaryPath, dictionary);
+            }//foreach dictionaries
+        }//BuildToolDictionaries
 
         private static void BuildOutput(RunSettings runSettings, Dictionary<string, ConcurrentDictionary<string, bool>> hashMatches, ConcurrentQueue<string> unmatchedStringsQueue)
         {
