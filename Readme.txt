@@ -32,10 +32,11 @@ Config options:
 "tryExtensions": false,-- adds file extensions that appear in qar files to input strings
 "hashesToHex": false, -- converts input hashes to hex representation
 "validateMode": false, -- for validating using mgsv-lookup-strings repo layout
-"validateRoot": "", -- path to hash types.json for format, should be at root
+"validateRoot": "", -- path to hash types.json for format, should be at root, see mgsv-lookup-strings repo
 "matchedStringsNameIsDictionary": false -- Should only be used when input strings are a folder, else it will overwrite the input strings file.
 By default matched strings will be written to <inputStringsPath>Strings_matchedStrings.txt (if input strings are a folder), 
 when set to true matched strings will be written to <inputStringsPath>.txt , which saves hasle of having to rename stuff if your workflow is for updating the mgsv-strings github repo
+"buildToolDictionaries": false, -- only runs if validateMode, combine the mgsv-lookup-strings repo Dictionaries\{gameId}\{hashName} dictionaries to tool dictionary name {fileType}_{hashName}_dictionary.txt
 
 validate hash types .json example
 {
@@ -51,6 +52,7 @@ Output:
 <hashes>_unmatchedHashes.txt - hashes that didn't match any strings
 
 <strings>_matchedStrings.txt - strings that matched a hash, can be considered the validated dictionary for the given input hashes.
+<strings>_unmatchedStrings.txt - strings that didn't match any hash
 
 <strings>_HashStringMatches.txt - hash string pairs, useful as a manual human lookup.
 
