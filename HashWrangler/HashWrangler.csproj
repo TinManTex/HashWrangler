@@ -49,10 +49,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="HashFuncs.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Utility\fnvhash.cs" />
-    <Compile Include="Utility\Hashing.cs" />
+    <Compile Include="Hashing\fnvhash.cs" />
+    <Compile Include="Hashing\Hashing.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
