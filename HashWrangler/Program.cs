@@ -11,7 +11,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Hashing;
 using static Hashing.FoxEngine;
-
+using static Hashing.HashFuncs;
 //
 using System;
 using System.IO;

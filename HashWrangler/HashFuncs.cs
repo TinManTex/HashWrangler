@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace Hashing {
     class HashFuncs {
@@ -8,7 +9,7 @@ namespace Hashing {
         //tex string hash function name to HashFunc
         //add to this if you add new HashFuncs
         //hash function name should be lowercase
-        private static Dictionary<string, HashFunction> hashFuncs = new Dictionary<string, HashFunction> {
+        public static Dictionary<string, HashFunction> hashFuncs = new Dictionary<string, HashFunction> {
             {"strcode32", StrCode32Str},
             {"strcode64", StrCode64Str},
             {"strcode32hex", StrCode32HexStr},
@@ -107,7 +108,7 @@ namespace Hashing {
 
         public static string Md5HashTextStr(string text)
         {
-            byte[] hash = Md5HashText(text);
+            byte[] hash = Hashing.FoxEngine.Md5HashText(text);
 
             string hashStr = BitConverter.ToString(hash);//tex converts to hex pairs seperated by -
             hashStr = hashStr.Replace("-", "");//tex remove seperators
