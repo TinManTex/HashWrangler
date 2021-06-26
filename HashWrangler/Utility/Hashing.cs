@@ -26,6 +26,11 @@ namespace Utility
             {"pathcode64gz", PathCode64GzStr},//tex equivalent to StrCode Hex.
             {"extensioncode64", ExtensionCode64Str },
             {"md5hashtext", Md5HashTextStr },//tex fpk entry.md5hash for 'encrypted hashes'/ filepath
+            //tex used in wwise 
+            {"fnv1hash32", FNV1Hash32Str },
+            {"fnv1hash64", FNV1Hash64Str },
+            {"fnv1ahash32", FNV1aHash32Str },
+            {"fnv1ahash64", FNV1aHash64Str },
             {"unknown32", Unknown32Str },//tex for unknown hash types, just to put it in a category so tools can chew through stuff without having to exclude, should always match false
             {"unknown64", Unknown64Str },//tex 
         };
@@ -476,6 +481,36 @@ namespace Utility
             hashStr = hashStr.Replace("-", "");//tex remove seperators
             return hashStr;
         }
+
+        //tex fnvhash from https://gist.github.com/RobThree/25d764ea6d4849fdd0c79d15cda27d61 check.cs
+        public static string FNV1Hash32Str(string text)
+        {
+            var fnvHash = new FNV1Hash32();
+            var value = fnvHash.ComputeHash(Encoding.UTF8.GetBytes(text));//DEBUGNOW encoding? -v-
+            var hash = fnvHash.HashSize == 32 ? BitConverter.ToUInt32(value, 0) : BitConverter.ToUInt64(value, 0);
+            return hash.ToString();
+        }//FNV1Hash32Str
+        public static string FNV1Hash64Str(string text)
+        {
+            var fnvHash = new FNV1Hash64();
+            var value = fnvHash.ComputeHash(Encoding.UTF8.GetBytes(text));
+            var hash = fnvHash.HashSize == 32 ? BitConverter.ToUInt32(value, 0) : BitConverter.ToUInt64(value, 0);
+            return hash.ToString();
+        }//FNV1Hash64Str
+        public static string FNV1aHash32Str(string text)
+        {
+            var fnvHash = new FNV1aHash32();
+            var value = fnvHash.ComputeHash(Encoding.UTF8.GetBytes(text));
+            var hash = fnvHash.HashSize == 32 ? BitConverter.ToUInt32(value, 0) : BitConverter.ToUInt64(value, 0);
+            return hash.ToString();
+        }//FNV1Hash32Str
+        public static string FNV1aHash64Str(string text)
+        {
+            var fnvHash = new FNV1aHash64();
+            var value = fnvHash.ComputeHash(Encoding.UTF8.GetBytes(text));
+            var hash = fnvHash.HashSize == 32 ? BitConverter.ToUInt32(value, 0) : BitConverter.ToUInt64(value, 0);
+            return hash.ToString();
+        }//FNV1Hash64Str
 
         public static string Unknown32Str(string text)
         {
