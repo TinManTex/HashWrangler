@@ -8,12 +8,14 @@ using System.Text;
 
 namespace Hashing
 {
-    //tex mostly from gzstool with some stuff commented out
+    //tex mostly from gzstool Utility.Hashing with some stuff commented out
+    /// <summary>
+    /// Fox Engine Hashing functions
+    /// </summary>
     public static class FoxEngine
     {
         private static readonly MD5 Md5 = MD5.Create();
         private static readonly Dictionary<ulong, string> HashNameDictionary = new Dictionary<ulong, string>();
-
         //tex OFF private static readonly Dictionary<byte[], string> Md5HashNameDictionary =
           //  new Dictionary<byte[], string>(new StructuralEqualityComparer<byte[]>());
 
@@ -217,6 +219,20 @@ namespace Hashing
                 : maskedHash;
         }
 
+        //tex stripped down version of HashFileName for performance
+        //ASSUMPTION: string being tested has been prepared, no leading '/Assets/', path/filename only, no file extension
+        public static ulong HashAssetsPath(string text) {
+            const ulong seed0 = 0x9ae16a3b2f90404f;
+            byte[] seed1Bytes = new byte[sizeof(ulong)];
+            for (int i = text.Length - 1, j = 0; i >= 0 && j < sizeof(ulong); i--, j++) {
+                seed1Bytes[j] = Convert.ToByte(text[i]);
+            }
+            ulong seed1 = BitConverter.ToUInt64(seed1Bytes, 0);
+            ulong maskedHash = CityHash.CityHash.CityHash64WithSeeds(text, seed0, seed1) & 0x3FFFFFFFFFFFF;
+
+            return maskedHash;
+        }
+
         //HashFileNameLegacy in GzsTool.Core
         public static ulong StrCode(string text, bool removeExtension = true)
         {
@@ -334,6 +350,7 @@ namespace Hashing
         {
             return Md5.ComputeHash(buffer);
         }
+
         */
 
         internal static byte[] Md5HashText(string text)
@@ -377,5 +394,5 @@ namespace Hashing
 
             return extension;
         }
-    }//Hashing
-}//namespace Utility
+    }//FoxEngine
+}//namespace Hashing
