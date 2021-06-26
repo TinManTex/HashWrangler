@@ -17,6 +17,12 @@ PathCode64
 PathCode64Gz
 ExtensionCode64
 Md5HashText
+FNV1Hash32
+FNV1Hash64
+FNV1aHash32
+FNV1aHash64
+Unkown32
+Unkown64
 Options are case insensitive
 
 Usage json config:
