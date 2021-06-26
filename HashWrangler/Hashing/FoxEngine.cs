@@ -6,10 +6,10 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Utility
+namespace Hashing
 {
     //tex mostly from gzstool with some stuff commented out
-    public static class Hashing
+    public static class FoxEngine
     {
         private static readonly MD5 Md5 = MD5.Create();
         private static readonly Dictionary<ulong, string> HashNameDictionary = new Dictionary<ulong, string>();

@@ -9,8 +9,8 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Utility;
-using static Utility.Hashing;
+using Hashing;
+using static Hashing.FoxEngine;
 
 //
 using System;
@@ -630,7 +630,7 @@ namespace HashWrangler
                             AddMatch(hashMatches, HashFunc, extLine, unmatchedStrings);
                         }
 
-                        foreach (var testExtension in Hashing.FileExtensions)
+                        foreach (var testExtension in FoxEngine.FileExtensions)
                         {
                             string extLine = $"{line}.{testExtension}";
                             AddMatch(hashMatches, HashFunc, extLine, unmatchedStrings);

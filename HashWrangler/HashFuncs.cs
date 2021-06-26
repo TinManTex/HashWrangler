@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace BruteGen {
+namespace Hashing {
     class HashFuncs {
         public delegate string HashFunction(string str);//tex makes testing different hash types a bit easier by outputing the hash as a string.
 
